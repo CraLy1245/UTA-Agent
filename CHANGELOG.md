@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.0 - 2026-07-18
+
+### Added
+
+- 添加读取/输出 Token 账户、整数 Units 交易账本和初始余额 Alembic 数据。
+- 添加统一 `UsageNormalizer`，同时保存 Provider 原始 Usage 与归一化 Usage，缓存和推理明细不重复计费。
+- 添加每轮原子扣款、满意 108% 精确奖励、不满意与文字反馈、评价历史及幂等键。
+- 添加不可变 `turn_execution_traces`，记录模型、真实工具、原始/归一化 Usage、延迟与结构化结果。
+- 添加生存状态、交易历史、反馈、执行轨迹 API，以及 `usage.updated`/`balance.updated` 事件。
+- 右侧状态栏显示两类余额、本轮消耗和交易历史；回答支持可持久化满意/不满意与文字反馈。
+
+### Changed
+
+- 每轮模型上下文动态注入当前两类余额，但余额不用于拒绝任务或削减必要验证。
+- `survival_reward` 与 `quality_feedback` 使用同一反馈事件关联但由独立服务处理，评价修改不会撤销或重复发放奖励。
+
+### Security
+
+- Token、反馈和执行轨迹不保存 API Key、Authorization Header 或完整模型上下文。
+- 账本交易使用唯一幂等键；反馈写入使用 SQLite `BEGIN IMMEDIATE` 串行化奖励判断。
+
 ## 0.4.0 - 2026-07-18
 
 ### Added

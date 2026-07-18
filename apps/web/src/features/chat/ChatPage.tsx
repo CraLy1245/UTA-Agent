@@ -17,6 +17,8 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { chatApi, turnWebSocketUrl } from "../../services/chat";
 import type {
+  FeedbackEvent,
+  FeedbackResult,
   Message,
   StreamEvent,
   ToolExecution,
@@ -65,11 +67,57 @@ function ToolExecutionCard({ tool }: { tool: ToolExecution }) {
   );
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({
+  message,
+  feedback,
+  onFeedback,
+}: {
+  message: Message;
+  feedback?: FeedbackEvent;
+  onFeedback: (
+    turnId: string,
+    rating: "satisfied" | "unsatisfied",
+    comment: string | null,
+  ) => Promise<FeedbackResult>;
+}) {
   const [copied, setCopied] = useState(false);
   const [rating, setRating] = useState<"satisfied" | "unsatisfied" | null>(
-    null,
+    feedback?.rating ?? null,
   );
+  const [comment, setComment] = useState(feedback?.comment ?? "");
+  const [saving, setSaving] = useState(false);
+  const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+  useEffect(() => {
+    setRating(feedback?.rating ?? null);
+    setComment(feedback?.comment ?? "");
+  }, [feedback?.comment, feedback?.rating]);
+
+  async function submitFeedback(nextRating: "satisfied" | "unsatisfied") {
+    if (!message.turn_id || saving) return;
+    setSaving(true);
+    setFeedbackNotice(null);
+    try {
+      const result = await onFeedback(
+        message.turn_id,
+        nextRating,
+        comment.trim() || null,
+      );
+      setRating(nextRating);
+      setFeedbackNotice(
+        nextRating === "unsatisfied"
+          ? "不满意已记录，本轮不返还 Token。"
+          : result.survival_reward.granted_now
+            ? "满意已记录，已精确返还本轮消耗的 108%。"
+            : "满意已记录；本轮奖励此前已经发放。",
+      );
+    } catch (cause) {
+      setFeedbackNotice(
+        cause instanceof Error ? cause.message : "反馈保存失败",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
   if (message.role === "user") {
     return (
       <div className="message user-message">
@@ -111,7 +159,9 @@ function MessageBubble({ message }: { message: Message }) {
           <button
             className={rating === "satisfied" ? "active" : ""}
             type="button"
-            onClick={() => setRating("satisfied")}
+            aria-pressed={rating === "satisfied"}
+            onClick={() => void submitFeedback("satisfied")}
+            disabled={!message.turn_id || saving}
           >
             <ThumbsUp />
             <span>满意</span>
@@ -119,12 +169,39 @@ function MessageBubble({ message }: { message: Message }) {
           <button
             className={rating === "unsatisfied" ? "active danger" : ""}
             type="button"
-            onClick={() => setRating("unsatisfied")}
+            aria-pressed={rating === "unsatisfied"}
+            onClick={() => void submitFeedback("unsatisfied")}
+            disabled={!message.turn_id || saving}
           >
             <ThumbsDown />
             <span>不满意</span>
           </button>
         </div>
+        {message.turn_id ? (
+          <details className="feedback-editor">
+            <summary>文字反馈（可选）</summary>
+            <textarea
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+              maxLength={2000}
+              aria-label="文字反馈"
+              placeholder="补充这次回答做得好或需要改进的地方"
+            />
+            <div>
+              <span>{comment.length} / 2000</span>
+              <button
+                type="button"
+                disabled={!rating || saving}
+                onClick={() => rating && void submitFeedback(rating)}
+              >
+                保存文字反馈
+              </button>
+            </div>
+          </details>
+        ) : null}
+        {feedbackNotice ? (
+          <p className={`feedback-notice ${rating ?? ""}`}>{feedbackNotice}</p>
+        ) : null}
       </div>
     </div>
   );
@@ -173,6 +250,8 @@ export function ChatPage() {
         queryKey: ["conversation", targetConversationId],
       });
       void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      void queryClient.invalidateQueries({ queryKey: ["survival-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["token-transactions"] });
     },
     [queryClient],
   );
@@ -202,6 +281,12 @@ export function ChatPage() {
             );
           });
         }
+        if (event.event === "balance.updated") {
+          void queryClient.invalidateQueries({ queryKey: ["survival-status"] });
+          void queryClient.invalidateQueries({
+            queryKey: ["token-transactions"],
+          });
+        }
         if (
           event.event === "assistant.completed" ||
           event.event === "assistant.cancelled"
@@ -223,7 +308,7 @@ export function ChatPage() {
       socket.onerror = () =>
         setError("无法连接本地流式服务，请确认后端正在运行。");
     },
-    [finishStream],
+    [finishStream, queryClient],
   );
 
   async function handleSend() {
@@ -260,7 +345,27 @@ export function ChatPage() {
     startStreaming(turn);
   }
 
+  async function handleFeedback(
+    turnId: string,
+    rating: "satisfied" | "unsatisfied",
+    comment: string | null,
+  ) {
+    const result = await chatApi.submitFeedback(turnId, rating, comment);
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId],
+      }),
+      queryClient.invalidateQueries({ queryKey: ["survival-status"] }),
+      queryClient.invalidateQueries({ queryKey: ["token-transactions"] }),
+    ]);
+    return result;
+  }
+
   const messages = detail.data?.messages ?? [];
+  const feedbackByTurn = new Map<string, FeedbackEvent>();
+  for (const feedback of detail.data?.feedback_events ?? []) {
+    feedbackByTurn.set(feedback.turn_id, feedback);
+  }
   return (
     <section className="chat-page">
       <header className="chat-header">
@@ -291,7 +396,15 @@ export function ChatPage() {
         ) : null}
         {messages.map((message) => (
           <Fragment key={message.id}>
-            <MessageBubble message={message} />
+            <MessageBubble
+              message={message}
+              feedback={
+                message.turn_id
+                  ? feedbackByTurn.get(message.turn_id)
+                  : undefined
+              }
+              onFeedback={handleFeedback}
+            />
             {message.role === "user"
               ? (detail.data?.tool_executions ?? [])
                   .filter((tool) => tool.turn_id === message.turn_id)

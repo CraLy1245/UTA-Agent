@@ -40,6 +40,7 @@ class ProviderStreamEvent:
     input_tokens: int | None = None
     output_tokens: int | None = None
     field_shape: str | None = None
+    raw_usage: dict[str, Any] | None = None
     tool_calls: tuple[ProviderToolCallDelta, ...] = ()
 
 
@@ -187,14 +188,28 @@ class OpenAICompatibleProvider:
             content = OpenAICompatibleProvider._content_text(payload.get("output_text"))
         if content is None and payload.get("type") == "response.output_text.delta":
             content = OpenAICompatibleProvider._content_text(payload.get("delta"))
-        usage = payload.get("usage") or {}
+        raw_usage = payload.get("usage")
+        usage = raw_usage if isinstance(raw_usage, dict) else {}
         return ProviderStreamEvent(
             delta=content,
-            input_tokens=usage.get("prompt_tokens") or usage.get("input_tokens"),
-            output_tokens=usage.get("completion_tokens") or usage.get("output_tokens"),
+            input_tokens=OpenAICompatibleProvider._usage_value(
+                usage, "prompt_tokens", "input_tokens"
+            ),
+            output_tokens=OpenAICompatibleProvider._usage_value(
+                usage, "completion_tokens", "output_tokens"
+            ),
             field_shape=OpenAICompatibleProvider._field_shape(payload),
+            raw_usage=usage or None,
             tool_calls=tool_calls,
         )
+
+    @staticmethod
+    def _usage_value(usage: dict[str, Any], *fields: str) -> int | None:
+        for field in fields:
+            value = usage.get(field)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                return value
+        return None
 
     @staticmethod
     def _tool_call_deltas(value: object) -> tuple[ProviderToolCallDelta, ...]:

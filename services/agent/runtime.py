@@ -16,9 +16,11 @@ from services.agent.model_provider import (
     ProviderConfigurationError,
 )
 from services.agent.tool_runtime import ToolResult, WorkspaceToolRuntime
+from services.agent.usage_normalizer import UsageNormalizer
 from services.api.app.core.config import get_settings
 from services.api.app.db.models import Message, ModelSetting, ToolExecution, Turn
 from services.api.app.db.session import SessionLocal
+from services.survival.ledger import balance_context, balances, debit_completed_turn
 
 
 class CancellationRegistry:
@@ -203,16 +205,14 @@ async def _run_model_loop(
     messages: list[dict[str, Any]],
     provider: Any,
     cancel_event: asyncio.Event,
-) -> tuple[str, int | None, int | None]:
+    survival_context: str,
+) -> tuple[str, list[dict[str, Any]]]:
     settings = get_settings()
     tools = _tool_runtime() if settings.tools_enabled else None
     tool_schemas = tools.schemas if tools is not None else []
     visible_content: list[str] = []
     field_shapes: set[str] = set()
-    total_input_tokens = 0
-    total_output_tokens = 0
-    saw_input_usage = False
-    saw_output_usage = False
+    raw_usages: list[dict[str, Any]] = []
     call_sequence = 0
 
     messages.insert(
@@ -227,6 +227,7 @@ async def _run_model_loop(
             ),
         },
     )
+    messages.insert(1, {"role": "system", "content": survival_context})
 
     for _ in range(settings.max_model_loops):
         if cancel_event.is_set():
@@ -235,6 +236,7 @@ async def _run_model_loop(
         iteration_content: list[str] = []
         iteration_input: int | None = None
         iteration_output: int | None = None
+        iteration_raw_usage: dict[str, Any] | None = None
         async for provider_event in provider.stream(messages, tools=tool_schemas):
             if cancel_event.is_set():
                 raise asyncio.CancelledError
@@ -260,13 +262,18 @@ async def _run_model_loop(
                 iteration_input = provider_event.input_tokens
             if provider_event.output_tokens is not None:
                 iteration_output = provider_event.output_tokens
+            if provider_event.raw_usage is not None:
+                iteration_raw_usage = provider_event.raw_usage
 
-        if iteration_input is not None:
-            total_input_tokens += iteration_input
-            saw_input_usage = True
-        if iteration_output is not None:
-            total_output_tokens += iteration_output
-            saw_output_usage = True
+        if iteration_raw_usage is not None:
+            raw_usages.append(iteration_raw_usage)
+        elif iteration_input is not None or iteration_output is not None:
+            fallback_usage: dict[str, Any] = {}
+            if iteration_input is not None:
+                fallback_usage["input_tokens"] = iteration_input
+            if iteration_output is not None:
+                fallback_usage["output_tokens"] = iteration_output
+            raw_usages.append(fallback_usage)
 
         if pending_calls:
             ordered_calls = [pending_calls[index] for index in sorted(pending_calls)]
@@ -301,20 +308,12 @@ async def _run_model_loop(
         if not content:
             shape_summary = " | ".join(sorted(field_shapes))[:900]
             detail = f" (event fields: {shape_summary})" if shape_summary else ""
-            usage_detail = (
-                f" (usage: input={total_input_tokens if saw_input_usage else None}, "
-                f"output={total_output_tokens if saw_output_usage else None})"
-                if saw_input_usage or saw_output_usage
-                else ""
-            )
+            normalized = UsageNormalizer.normalize(raw_usages)
+            usage_detail = f" (usage: {normalized.as_dict()})" if raw_usages else ""
             raise RuntimeError(
                 f"Provider completed without an assistant message{detail}{usage_detail}"
             )
-        return (
-            content,
-            total_input_tokens if saw_input_usage else None,
-            total_output_tokens if saw_output_usage else None,
-        )
+        return content, raw_usages
     raise RuntimeError("Model exceeded the configured tool loop limit")
 
 
@@ -353,6 +352,8 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                 {"role": message.role, "content": message.content} for message in history
             ]
             provider = _provider_for(setting)
+            model_id = setting.model
+            survival_context = balance_context(db)
             turn.status = "running"
             turn.started_at = datetime.now(UTC)
             db.commit()
@@ -360,12 +361,13 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
 
         try:
             async with asyncio.timeout(get_settings().turn_timeout_seconds):
-                content, input_tokens, output_tokens = await _run_model_loop(
+                content, raw_usages = await _run_model_loop(
                     websocket=websocket,
                     turn=turn,
                     messages=messages,
                     provider=provider,
                     cancel_event=cancel_event,
+                    survival_context=survival_context,
                 )
         except asyncio.CancelledError:
             with SessionLocal() as db:
@@ -391,6 +393,7 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
             return
 
         with SessionLocal() as db:
+            db.connection().exec_driver_sql("BEGIN IMMEDIATE")
             current_turn = db.get(Turn, turn_id)
             if current_turn is None:
                 raise RuntimeError("Turn disappeared before finalization")
@@ -410,20 +413,74 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                 content=content,
                 sequence=sequence,
             )
+            completed_at = datetime.now(UTC)
+            normalized_usage = UsageNormalizer.normalize(raw_usages)
             current_turn.status = "completed"
-            current_turn.completed_at = datetime.now(UTC)
-            current_turn.input_tokens = input_tokens
-            current_turn.output_tokens = output_tokens
+            current_turn.completed_at = completed_at
+            current_turn.input_tokens = normalized_usage.input_tokens
+            current_turn.output_tokens = normalized_usage.output_tokens
             db.add(assistant_message)
-            db.commit()
-            if input_tokens is not None or output_tokens is not None:
-                await websocket.send_json(
-                    websocket_event(
-                        "usage.updated",
-                        current_turn,
-                        {"input_tokens": input_tokens, "output_tokens": output_tokens},
-                    )
+            tool_executions = list(
+                db.scalars(
+                    select(ToolExecution)
+                    .where(ToolExecution.turn_id == current_turn.id)
+                    .order_by(ToolExecution.call_sequence)
                 )
+            )
+            tool_names = [execution.tool_name for execution in tool_executions]
+            tool_outcomes = [
+                {"name": execution.tool_name, "status": execution.status}
+                for execution in tool_executions
+            ]
+            started_at = current_turn.started_at or current_turn.created_at
+            completed_for_latency = (
+                completed_at.replace(tzinfo=None)
+                if started_at.tzinfo is None
+                else completed_at
+            )
+            latency_ms = int((completed_for_latency - started_at).total_seconds() * 1000)
+            _, debit_transactions = debit_completed_turn(
+                db,
+                turn=current_turn,
+                model_id=model_id,
+                normalized_usage=normalized_usage,
+                raw_usages=raw_usages,
+                tool_names=tool_names,
+                tool_outcomes=tool_outcomes,
+                latency_ms=latency_ms,
+            )
+            db.flush()
+            account_snapshot = balances(db)
+            db.commit()
+            await websocket.send_json(
+                websocket_event(
+                    "usage.updated",
+                    current_turn,
+                    {
+                        **normalized_usage.as_dict(),
+                        "provider_raw_usage": raw_usages,
+                    },
+                )
+            )
+            await websocket.send_json(
+                websocket_event(
+                    "balance.updated",
+                    current_turn,
+                    {
+                        "accounts": {
+                            key: {
+                                "balance_units": account.balance_units,
+                                "initial_balance_units": account.initial_balance_units,
+                            }
+                            for key, account in account_snapshot.items()
+                        },
+                        "turn_change_units": {
+                            transaction.account_type: transaction.amount_units
+                            for transaction in debit_transactions
+                        },
+                    },
+                )
+            )
             await websocket.send_json(
                 websocket_event(
                     "assistant.completed",

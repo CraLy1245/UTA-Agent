@@ -32,6 +32,15 @@ export type ToolExecution = {
 export type ConversationDetail = ConversationSummary & {
   messages: Message[];
   tool_executions: ToolExecution[];
+  feedback_events: FeedbackEvent[];
+};
+
+export type FeedbackEvent = {
+  id: string;
+  turn_id: string;
+  rating: "satisfied" | "unsatisfied";
+  comment: string | null;
+  created_at: string;
 };
 
 export type Turn = {
@@ -64,6 +73,48 @@ export type ToolStatus = {
   available_tools: string[];
 };
 
+export type TokenAccount = {
+  account_type: "read" | "output";
+  balance_units: number;
+  initial_balance_units: number;
+  updated_at: string;
+};
+
+export type SurvivalStatus = {
+  units_per_token: number;
+  accounts: TokenAccount[];
+  latest_turn: {
+    turn_id: string;
+    input_tokens: number;
+    output_tokens: number;
+    read_change_units: number;
+    output_change_units: number;
+    completed_at: string;
+  } | null;
+};
+
+export type TokenTransaction = {
+  id: string;
+  turn_id: string | null;
+  feedback_event_id: string | null;
+  account_type: "read" | "output";
+  transaction_type: "usage_debit" | "survival_reward" | string;
+  amount_units: number;
+  balance_before: number;
+  balance_after: number;
+  idempotency_key: string;
+  metadata_value: Record<string, unknown>;
+  created_at: string;
+};
+
+export type FeedbackResult = {
+  quality_feedback: FeedbackEvent;
+  survival_reward: {
+    granted_now: boolean;
+    transactions: TokenTransaction[];
+  };
+};
+
 export type StreamEvent = {
   event: string;
   conversation_id: string;
@@ -74,6 +125,12 @@ export type StreamEvent = {
     message?: Message | string;
     input_tokens?: number;
     output_tokens?: number;
+    usage_complete?: boolean;
+    accounts?: Record<
+      string,
+      { balance_units: number; initial_balance_units: number }
+    >;
+    turn_change_units?: Record<string, number>;
     tool?: ToolExecution;
   };
 };

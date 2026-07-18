@@ -76,6 +76,7 @@ function mockApi() {
         return Response.json({
           ...conversation,
           tool_executions: [],
+          feedback_events: [],
           messages: [
             {
               id: "assistant-1",
@@ -86,6 +87,47 @@ function mockApi() {
               created_at: now,
             },
           ],
+        });
+      if (url.includes("/survival/status"))
+        return Response.json({
+          units_per_token: 100,
+          accounts: [
+            {
+              account_type: "read",
+              balance_units: 100_000_000_000,
+              initial_balance_units: 100_000_000_000,
+              updated_at: now,
+            },
+            {
+              account_type: "output",
+              balance_units: 10_000_000_000,
+              initial_balance_units: 10_000_000_000,
+              updated_at: now,
+            },
+          ],
+          latest_turn: {
+            turn_id: "old-turn",
+            input_tokens: 1000,
+            output_tokens: 300,
+            read_change_units: -100_000,
+            output_change_units: -30_000,
+            completed_at: now,
+          },
+        });
+      if (url.includes("/survival/transactions")) return Response.json([]);
+      if (url.endsWith("/turns/old-turn/feedback"))
+        return Response.json({
+          quality_feedback: {
+            id: "feedback-1",
+            turn_id: "old-turn",
+            rating: "satisfied",
+            comment: null,
+            created_at: now,
+          },
+          survival_reward: {
+            granted_now: true,
+            transactions: [],
+          },
         });
       if (url.endsWith("/model-settings/main"))
         return Response.json(modelSetting);
@@ -112,7 +154,7 @@ function renderApp(path = "/chat/mock-1") {
   );
 }
 
-describe("phase 3 application", () => {
+describe("phase 4 application", () => {
   beforeEach(() => {
     useUiStore.setState({
       conversationsCollapsed: false,
@@ -131,10 +173,31 @@ describe("phase 3 application", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("已持久化的回答")).toBeInTheDocument();
     expect(screen.getByText("Agent 状态")).toBeInTheDocument();
+    expect(await screen.findByText("1,000,000,000.00")).toBeInTheDocument();
+    expect(screen.getByText("100,000,000.00")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "折叠会话栏" }));
     expect(
       screen.getByRole("button", { name: "展开会话栏" }),
     ).toBeInTheDocument();
+  });
+
+  it("records satisfaction and explains the survival reward", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await screen.findByText("已持久化的回答");
+
+    await user.click(screen.getByRole("button", { name: "满意" }));
+
+    expect(
+      await screen.findByText("满意已记录，已精确返还本轮消耗的 108%。"),
+    ).toBeInTheDocument();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/turns/old-turn/feedback"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ rating: "satisfied", comment: null }),
+      }),
+    );
   });
 
   it("starts a WebSocket stream, renders deltas, and sends cancellation", async () => {

@@ -8,6 +8,8 @@ from services.api.app.api.conversations import router as conversations_router
 from services.api.app.api.conversations import turn_router
 from services.api.app.api.health import router as health_router
 from services.api.app.api.model_settings import router as model_settings_router
+from services.api.app.api.survival import router as survival_router
+from services.api.app.api.survival import turn_router as survival_turn_router
 from services.api.app.api.tools import router as tools_router
 from services.api.app.api.websocket import router as websocket_router
 from services.api.app.core.config import get_settings
@@ -35,5 +37,7 @@ app.include_router(health_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
 app.include_router(turn_router, prefix="/api")
 app.include_router(model_settings_router, prefix="/api")
+app.include_router(survival_router, prefix="/api")
+app.include_router(survival_turn_router, prefix="/api")
 app.include_router(tools_router, prefix="/api")
 app.include_router(websocket_router, prefix="/api")

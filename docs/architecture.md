@@ -11,6 +11,7 @@ FastAPI API
     ├─ Conversation API ─ SQLAlchemy transaction boundary
     └─ Turn Runtime ─ OpenAI-compatible SSE Provider
                     └─ Workspace Tool Runtime
+    └─ Survival API ─ Quality Feedback + Reward Service
 SQLite WAL
     │ durable jobs（第 6 阶段启用）
 Cognitive Worker
@@ -41,6 +42,15 @@ Cognitive Worker
 - 工具根目录由 `SURVIVAL_AGENT_WORKSPACE_PATH` 配置并在启动后解析为绝对路径。所有模型输入路径必须是 Workspace 内相对路径，解析后的父目录也必须仍位于根目录。
 - 写入采用同目录临时文件与原子替换；覆盖已有文件必须显式授权。当前没有删除、Shell、进程或网络工具。
 - 工具失败作为结构化结果回传模型，由模型解释；不会把越界路径变成后端未处理异常。
+
+## 第 4 阶段生存账本与执行轨迹边界
+
+- `UsageNormalizer` 是 Provider Usage 到账本的唯一归一化入口。只累计 `prompt/input_tokens` 与 `completion/output_tokens` 总量，缓存、推理等明细保留在 raw usage 中但不再次扣款。
+- 成功最终回合在一个 SQLite 事务中保存 assistant 消息、completed 回合、两条 usage debit、不可变 execution trace 和最新账户余额；取消或失败回合不扣款、不生成 trace。
+- 账本使用整数 Units，余额允许低于零且不会触发自动拒绝。每轮开始时动态注入当前余额，并明确质量、真实性和必要验证优先于 Token 效率。
+- `quality_feedback` 负责评价、文字和历史；`survival_reward` 只依据 execution trace 发放 108% Token。两个通道由 feedback event ID 关联，代码与契约分离。
+- 奖励键 `reward:{turn_id}:{account_type}` 唯一。评价修改保留历史，已发奖励不撤销，重复满意不增加余额。
+- execution trace 只在成功最终回答后创建；第 4 阶段记录真实模型、工具、Usage、延迟和客观工具摘要，不提前实现记忆或 Skill 竞争。
 
 ## 长期可替换性
 

@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Float,
@@ -41,6 +42,13 @@ class Conversation(Base):
         order_by="ToolExecution.call_sequence",
     )
 
+    @property
+    def feedback_events(self) -> list[FeedbackEvent]:
+        return sorted(
+            (event for turn in self.turns for event in turn.feedback_events),
+            key=lambda event: event.created_at,
+        )
+
 
 class Turn(Base):
     __tablename__ = "turns"
@@ -66,6 +74,13 @@ class Turn(Base):
     tool_executions: Mapped[list[ToolExecution]] = relationship(
         back_populates="turn", cascade="all, delete-orphan", order_by="ToolExecution.call_sequence"
     )
+    execution_trace: Mapped[TurnExecutionTrace | None] = relationship(
+        back_populates="turn", cascade="all, delete-orphan", uselist=False
+    )
+    feedback_events: Mapped[list[FeedbackEvent]] = relationship(
+        back_populates="turn", cascade="all, delete-orphan", order_by="FeedbackEvent.created_at"
+    )
+    token_transactions: Mapped[list[TokenTransaction]] = relationship(back_populates="turn")
 
 
 class Message(Base):
@@ -143,3 +158,122 @@ class ToolExecution(Base):
             return None
         value = json.loads(self.result_json)
         return value if isinstance(value, dict) else None
+
+
+class TokenAccount(Base):
+    __tablename__ = "token_accounts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    account_type: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+    balance_units: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    initial_balance_units: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class FeedbackEvent(Base):
+    __tablename__ = "feedback_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    turn_id: Mapped[str] = mapped_column(
+        ForeignKey("turns.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    rating: Mapped[str] = mapped_column(String(20), nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    turn: Mapped[Turn] = relationship(back_populates="feedback_events")
+    token_transactions: Mapped[list[TokenTransaction]] = relationship(
+        back_populates="feedback_event"
+    )
+
+
+class TokenTransaction(Base):
+    __tablename__ = "token_transactions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    turn_id: Mapped[str | None] = mapped_column(
+        ForeignKey("turns.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    feedback_event_id: Mapped[str | None] = mapped_column(
+        ForeignKey("feedback_events.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    account_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    transaction_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    amount_units: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    balance_before: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    balance_after: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(250), nullable=False, unique=True)
+    metadata_json: Mapped[str] = mapped_column(Text(), nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    turn: Mapped[Turn | None] = relationship(back_populates="token_transactions")
+    feedback_event: Mapped[FeedbackEvent | None] = relationship(
+        back_populates="token_transactions"
+    )
+
+    @property
+    def metadata_value(self) -> dict[str, object]:
+        value = json.loads(self.metadata_json)
+        return value if isinstance(value, dict) else {}
+
+
+class TurnExecutionTrace(Base):
+    __tablename__ = "turn_execution_traces"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    turn_id: Mapped[str] = mapped_column(
+        ForeignKey("turns.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    model_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    memory_revision_ids_json: Mapped[str] = mapped_column(Text(), nullable=False, default="[]")
+    skill_revision_ids_json: Mapped[str] = mapped_column(Text(), nullable=False, default="[]")
+    tool_names_json: Mapped[str] = mapped_column(Text(), nullable=False, default="[]")
+    provider_raw_usage_json: Mapped[str] = mapped_column(Text(), nullable=False)
+    normalized_usage_json: Mapped[str] = mapped_column(Text(), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    output_tokens: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    latency_ms: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    completion_status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    objective_result_json: Mapped[str] = mapped_column(Text(), nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    turn: Mapped[Turn] = relationship(back_populates="execution_trace")
+
+    @staticmethod
+    def _json_value(raw: str, fallback: object) -> object:
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return fallback
+
+    @property
+    def memory_revision_ids(self) -> list[str]:
+        value = self._json_value(self.memory_revision_ids_json, [])
+        return value if isinstance(value, list) else []
+
+    @property
+    def skill_revision_ids(self) -> list[str]:
+        value = self._json_value(self.skill_revision_ids_json, [])
+        return value if isinstance(value, list) else []
+
+    @property
+    def tool_names(self) -> list[str]:
+        value = self._json_value(self.tool_names_json, [])
+        return value if isinstance(value, list) else []
+
+    @property
+    def provider_raw_usage(self) -> list[dict[str, object]]:
+        value = self._json_value(self.provider_raw_usage_json, [])
+        return value if isinstance(value, list) else []
+
+    @property
+    def normalized_usage(self) -> dict[str, object]:
+        value = self._json_value(self.normalized_usage_json, {})
+        return value if isinstance(value, dict) else {}
+
+    @property
+    def objective_result(self) -> dict[str, object]:
+        value = self._json_value(self.objective_result_json, {})
+        return value if isinstance(value, dict) else {}

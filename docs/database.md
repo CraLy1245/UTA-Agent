@@ -33,6 +33,15 @@
 
 工具记录只保存模型给出的相对路径和结构化结果，不保存 API Key。文件实体位于配置的 Workspace，不进入数据库。
 
+## 第 4 阶段表
+
+- `token_accounts`：`read`、`output` 两个账户的当前与初始 Units 余额。迁移初始值分别为 100,000,000,000 与 10,000,000,000 Units。
+- `token_transactions`：每回合两条 `usage_debit` 和首次满意时两条 `survival_reward`。保存前后余额、反馈事件关联、元数据和唯一 `idempotency_key`。会话删除时 `turn_id` 置空而不删除交易，避免余额失去审计依据。
+- `feedback_events`：追加保存每次满意/不满意及文字反馈；允许修改评价但完整历史不覆盖。
+- `turn_execution_traces`：每个成功回合唯一且创建后不更新，保存独立 Token/状态/时间字段，以及模型、实际 revision ID 数组、工具、raw/normalized Usage 和客观结果 JSON。
+
+迁移只从第 4 阶段开始建立初始账户；早期回合没有 execution trace，也不会被追溯扣款或伪造 raw Usage。只有 `20260718_0004` 之后真实完成的回合进入账本。
+
 ## 数据路径
 
 开发默认数据库：`data/survival_agent.db`。路径可通过 `SURVIVAL_AGENT_DATABASE_URL` 覆盖。数据库文件、WAL 和共享内存文件均不提交 Git。

@@ -614,6 +614,65 @@ button {
   color: #b44545;
   background: #fff0f0;
 }
+.feedback-editor {
+  max-width: 540px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #f8faf9;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.feedback-editor summary {
+  color: #627080;
+  font-size: 11px;
+  cursor: pointer;
+}
+.feedback-editor textarea {
+  width: 100%;
+  min-height: 72px;
+  margin-top: 9px;
+  padding: 9px 10px;
+  resize: vertical;
+  color: #263343;
+  background: #fff;
+  border: 1px solid #cfd8df;
+  border-radius: 6px;
+  outline: 0;
+}
+.feedback-editor textarea:focus {
+  border-color: #69ad8a;
+  box-shadow: 0 0 0 3px rgb(31 143 87 / 9%);
+}
+.feedback-editor > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+}
+.feedback-editor > div span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.feedback-editor button {
+  min-height: 30px;
+  padding: 0 10px;
+  color: #fff;
+  background: var(--green);
+  border-radius: 5px;
+  font-size: 11px;
+}
+.feedback-editor button:disabled {
+  opacity: 0.45;
+}
+.feedback-notice {
+  margin: 7px 0 0;
+  color: #177348;
+  font-size: 11px;
+}
+.feedback-notice.unsatisfied {
+  color: #a84949;
+}
 
 .composer-wrap {
   padding: 14px max(22px, 5vw) 14px;
@@ -765,6 +824,46 @@ button {
 .jobs-card b {
   color: #516071;
   font-weight: 600;
+}
+.transaction-history {
+  padding: 0;
+  overflow: hidden;
+}
+.transaction-history summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 13px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+.transaction-history summary strong {
+  color: var(--muted);
+  font-size: 10px;
+}
+.transaction-history > div {
+  max-height: 220px;
+  padding: 0 12px 10px;
+  overflow-y: auto;
+  border-top: 1px solid #edf0f3;
+}
+.transaction-history article {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 2px;
+  border-bottom: 1px solid #edf0f3;
+  color: #5d6978;
+  font-size: 10px;
+}
+.transaction-history article b {
+  color: #a34d4d;
+  white-space: nowrap;
+}
+.transaction-history article b.positive {
+  color: #17814e;
 }
 .status-collapse {
   min-height: 46px;

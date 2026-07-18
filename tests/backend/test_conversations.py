@@ -82,6 +82,7 @@ def test_conversation_crud_persists_messages(client: TestClient, monkeypatch) ->
         "assistant.delta",
         "assistant.delta",
         "usage.updated",
+        "balance.updated",
         "assistant.completed",
     ]
     detail = client.get(f"/api/conversations/{conversation_id}").json()
@@ -162,6 +163,7 @@ def test_tool_loop_persists_events_and_returns_result_to_model(
         "tool.completed",
         "assistant.delta",
         "usage.updated",
+        "balance.updated",
         "assistant.completed",
     ]
     assert (tmp_path / "notes/phase3.txt").read_text(encoding="utf-8") == "persisted"

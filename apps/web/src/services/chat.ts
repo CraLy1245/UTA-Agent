@@ -1,7 +1,10 @@
 import type {
   ConversationDetail,
   ConversationSummary,
+  FeedbackResult,
   ModelSetting,
+  SurvivalStatus,
+  TokenTransaction,
   ToolStatus,
   Turn,
 } from "../types/chat";
@@ -52,6 +55,21 @@ export const chatApi = {
     request<Turn>(`/turns/${turnId}/regenerate`, { method: "POST" }),
   getModelSetting: () => request<ModelSetting>("/model-settings/main"),
   getToolStatus: () => request<ToolStatus>("/tools/status"),
+  getSurvivalStatus: (conversationId?: string) =>
+    request<SurvivalStatus>(
+      `/survival/status${conversationId ? `?conversation_id=${encodeURIComponent(conversationId)}` : ""}`,
+    ),
+  getTokenTransactions: (limit = 20) =>
+    request<TokenTransaction[]>(`/survival/transactions?limit=${limit}`),
+  submitFeedback: (
+    turnId: string,
+    rating: "satisfied" | "unsatisfied",
+    comment?: string | null,
+  ) =>
+    request<FeedbackResult>(`/turns/${turnId}/feedback`, {
+      method: "POST",
+      body: JSON.stringify({ rating, comment: comment || null }),
+    }),
   updateModelSetting: (
     setting: Omit<
       ModelSetting,

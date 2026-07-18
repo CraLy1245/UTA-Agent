@@ -59,7 +59,9 @@ def get_conversation(conversation_id: str, db: SessionDep) -> Conversation:
         select(Conversation)
         .where(Conversation.id == conversation_id)
         .options(
-            selectinload(Conversation.messages), selectinload(Conversation.tool_executions)
+            selectinload(Conversation.messages),
+            selectinload(Conversation.tool_executions),
+            selectinload(Conversation.turns).selectinload(Turn.feedback_events),
         )
     )
     if conversation is None:

@@ -50,9 +50,20 @@ class ToolExecutionRead(BaseModel):
     completed_at: datetime | None
 
 
+class FeedbackEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    turn_id: str
+    rating: str
+    comment: str | None
+    created_at: datetime
+
+
 class ConversationDetail(ConversationSummary):
     messages: list[MessageRead]
     tool_executions: list[ToolExecutionRead]
+    feedback_events: list[FeedbackEventRead]
 
 
 class TurnCreate(BaseModel):
