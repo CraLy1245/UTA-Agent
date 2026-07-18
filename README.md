@@ -4,7 +4,15 @@ Survival Agent 是一个本地运行、图形优先、数据可恢复的 AI Agen
 
 ## 当前状态
 
-第 0 阶段已完成：React + TypeScript + Vite 前端、FastAPI 后端、SQLite/SQLAlchemy/Alembic、健康检查、测试与质量工具。尚未接入真实模型或业务功能。
+第 0、1 阶段已完成：基础架构、Hermes 风格三栏图形前端骨架、五个主路由与 Mock 数据交互均已通过验收。当前尚未接入真实模型；第 2 阶段将实现 OpenAI 兼容 Provider、持久化对话和结构化流式事件。
+
+已实现页面：
+
+- `/chat/:conversationId`：三栏对话工作区、工具状态、反馈与输入框 Mock 交互。
+- `/memory`：记忆筛选、占用、来源与状态骨架。
+- `/skills`：Skill 列表、统计与版本信息骨架。
+- `/activity`：后台任务汇总与状态列表。
+- `/settings`：模型、本地目录、工具开关与危险操作分区。
 
 ## 目录
 
