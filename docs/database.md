@@ -18,6 +18,15 @@
 | value      | TEXT         | 值           |
 | updated_at | DATETIME     | UTC 更新时间 |
 
+## 第 2 阶段表
+
+- `conversations`：会话标题与创建/更新时间。
+- `messages`：按 `conversation_id + sequence` 读取的用户和助手消息；回合取消或失败时不保存助手半截输出。
+- `turns`：pending、running、completed、cancelled、failed 状态，以及错误、Provider usage 和重新生成来源。
+- `model_settings`：`main`、`memory`、`skill` 三个可独立演化的模型角色。只保存非敏感配置和 API Key 环境变量名称。
+
+会话删除通过外键级联移除其消息与回合。重新生成回合复用原始用户消息，并通过 `source_turn_id` 保留来源。
+
 ## 数据路径
 
 开发默认数据库：`data/survival_agent.db`。路径可通过 `SURVIVAL_AGENT_DATABASE_URL` 覆盖。数据库文件、WAL 和共享内存文件均不提交 Git。

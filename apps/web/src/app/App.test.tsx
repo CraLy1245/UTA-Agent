@@ -1,61 +1,175 @@
-import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useUiStore } from "../stores/uiStore";
 import { App } from "./App";
 
+const now = "2026-07-18T11:30:00Z";
+const conversation = {
+  id: "mock-1",
+  title: "产品开发规划",
+  created_at: now,
+  updated_at: now,
+};
+const modelSetting = {
+  role: "main",
+  base_url: "https://api.openai.com/v1",
+  model: "gpt-5.6",
+  timeout_seconds: 120,
+  max_output_tokens: 8192,
+  temperature: null,
+  api_key_env: "OPENAI_API_KEY",
+  enabled: true,
+  has_api_key: false,
+  updated_at: now,
+};
+
+class FakeWebSocket {
+  static instances: FakeWebSocket[] = [];
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onerror: (() => void) | null = null;
+  constructor(public url: string) {
+    FakeWebSocket.instances.push(this);
+  }
+  close() {}
+  emit(payload: object) {
+    this.onmessage?.({ data: JSON.stringify(payload) } as MessageEvent<string>);
+  }
+}
+
+function mockApi() {
+  return vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/conversations") && init?.method !== "POST")
+        return Response.json([conversation]);
+      if (url.endsWith("/conversations/mock-1/turns"))
+        return Response.json(
+          {
+            id: "turn-1",
+            conversation_id: "mock-1",
+            user_message_id: "user-2",
+            source_turn_id: null,
+            status: "pending",
+            error_message: null,
+            input_tokens: null,
+            output_tokens: null,
+          },
+          { status: 201 },
+        );
+      if (url.endsWith("/turns/turn-1/cancel"))
+        return Response.json({
+          id: "turn-1",
+          conversation_id: "mock-1",
+          user_message_id: "user-2",
+          source_turn_id: null,
+          status: "running",
+          error_message: null,
+          input_tokens: null,
+          output_tokens: null,
+        });
+      if (url.endsWith("/conversations/mock-1"))
+        return Response.json({
+          ...conversation,
+          messages: [
+            {
+              id: "assistant-1",
+              turn_id: "old-turn",
+              role: "assistant",
+              content: "已持久化的回答",
+              sequence: 1,
+              created_at: now,
+            },
+          ],
+        });
+      if (url.endsWith("/model-settings/main"))
+        return Response.json(modelSetting);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+}
+
 function renderApp(path = "/chat/mock-1") {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <App />
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
     </MemoryRouter>,
   );
 }
 
-describe("phase 1 application shell", () => {
-  beforeEach(() =>
+describe("phase 2 application", () => {
+  beforeEach(() => {
     useUiStore.setState({
       conversationsCollapsed: false,
       statusCollapsed: false,
-    }),
-  );
+    });
+    FakeWebSocket.instances = [];
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    mockApi();
+  });
+  afterEach(() => vi.restoreAllMocks());
 
-  it("renders the three-column chat workspace and mock feedback interactions", async () => {
-    const user = userEvent.setup();
+  it("renders persistent conversation data and the three-column shell", async () => {
     renderApp();
-
-    expect(screen.getByText("Survival Agent")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "产品开发规划" }),
+      await screen.findByRole("heading", { name: "产品开发规划" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("已持久化的回答")).toBeInTheDocument();
     expect(screen.getByText("Agent 状态")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "满意" }));
-    expect(screen.getByRole("button", { name: "满意" })).toHaveClass("active");
-
-    await user.click(screen.getByRole("button", { name: "折叠会话栏" }));
+    await userEvent.click(screen.getByRole("button", { name: "折叠会话栏" }));
     expect(
       screen.getByRole("button", { name: "展开会话栏" }),
     ).toBeInTheDocument();
   });
 
-  it("opens each independent management page from the primary navigation", async () => {
+  it("starts a WebSocket stream, renders deltas, and sends cancellation", async () => {
     const user = userEvent.setup();
     renderApp();
+    await screen.findByRole("heading", { name: "产品开发规划" });
+    await user.type(
+      screen.getByRole("textbox", { name: "消息内容" }),
+      "新的问题",
+    );
+    await user.click(screen.getByRole("button", { name: "发送消息" }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    act(() =>
+      FakeWebSocket.instances[0].emit({
+        event: "assistant.delta",
+        conversation_id: "mock-1",
+        turn_id: "turn-1",
+        timestamp: now,
+        data: { content: "流式片段" },
+      }),
+    );
+    expect(await screen.findByText("流式片段")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "停止生成" }));
+    await waitFor(() =>
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/turns/turn-1/cancel"),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+  });
 
-    await user.click(screen.getByRole("link", { name: "记忆" }));
+  it("opens the independent management pages", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(await screen.findByRole("link", { name: "记忆" }));
     expect(screen.getByRole("heading", { name: "记忆" })).toBeInTheDocument();
-
     await user.click(screen.getByRole("link", { name: "技能" }));
     expect(screen.getByRole("heading", { name: "技能" })).toBeInTheDocument();
-
     await user.click(screen.getByRole("link", { name: "活动" }));
     expect(
       screen.getByRole("heading", { name: "后台活动" }),
     ).toBeInTheDocument();
-
     await user.click(screen.getByRole("link", { name: "设置" }));
     expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
   });

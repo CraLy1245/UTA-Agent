@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     environment: str = "development"
     database_url: str = "sqlite:///./data/survival_agent.db"
     cors_origins: list[str] = ["http://localhost:5173"]
+    openai_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OPENAI_API_KEY", "SURVIVAL_AGENT_OPENAI_API_KEY"),
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

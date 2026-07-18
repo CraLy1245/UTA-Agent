@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://survival-agent.local/contracts/websocket-events.json",
+  "title": "Survival Agent WebSocket Event",
+  "type": "object",
+  "required": ["event", "conversation_id", "turn_id", "timestamp", "data"],
+  "properties": {
+    "event": {
+      "enum": [
+        "turn.started",
+        "assistant.delta",
+        "assistant.completed",
+        "assistant.cancelled",
+        "usage.updated",
+        "error"
+      ]
+    },
+    "conversation_id": { "type": "string", "format": "uuid" },
+    "turn_id": { "type": "string", "format": "uuid" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "data": { "type": "object" }
+  },
+  "additionalProperties": false
+}

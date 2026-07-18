@@ -34,8 +34,6 @@
 
 浏览器验证先尝试 Codex 内置浏览器，但其客户端策略阻止访问本机 `localhost`；因此按前端验证规则回退到 Playwright CLI。最终截图保存在 `docs/design/phase-0-status-implementation.png`。
 
-## 下一阶段
-
 ## 第 1 阶段：Hermes 风格前端骨架
 
 状态：已完成
@@ -62,6 +60,34 @@
 
 视觉概念保存在 `docs/design/phase-1-chat-concept.png`。浏览器验证使用本机已有 Playwright CLI；Codex 内置浏览器技能存在，但本任务环境没有提供其可调用入口。
 
-## 下一阶段
+## 第 2 阶段：真实对话
 
-第 2 阶段将实现真实对话：模型配置、OpenAI 兼容 Provider、会话与消息持久化、WebSocket 流式事件、停止生成和错误重试。进入前必须重新读取根目录 `Survival Agent Development Plan (1).pdf`，并保持第 0、1 阶段验证持续通过。
+状态：已完成
+
+- [x] 非敏感模型配置持久化，API Key 仅从环境变量读取。
+- [x] OpenAI 兼容 Chat Completions SSE Provider。
+- [x] 会话创建、切换、重命名和删除。
+- [x] 消息与回合 SQLite 持久化。
+- [x] 结构化 WebSocket 流式输出。
+- [x] 停止生成、失败状态和重新生成。
+- [x] 页面刷新后消息恢复，模型错误不导致前端崩溃。
+- [x] 使用真实外部端点与 `gpt-5.6-sol` 完成模型回答。
+
+## 第 2 阶段当前验收证据
+
+| 检查                   | 结果                                      |
+| ---------------------- | ----------------------------------------- |
+| `uv run ruff check .`  | 通过                                      |
+| `uv run pytest`        | 通过，12 个后端测试                     |
+| `npm run lint:web`     | 通过                                      |
+| `npm run test:web`     | 通过，5 个前端测试                        |
+| `npm run build:web`    | 通过                                      |
+| Alembic 空库升级       | 通过，创建 main/memory/skill 三个模型角色 |
+| 跨进程 OpenAI 兼容 SSE | 通过，三段 delta + usage + completed      |
+| 浏览器 1536×1024       | 新建、发送、流式完成、刷新恢复均通过      |
+| 浏览器 390×844         | 无横向溢出或裁切                          |
+| 浏览器运行时           | 控制台 0 error/warning                    |
+| 真实外部模型           | `gpt-5.6-sol` 流式回答成功，刷新后保持    |
+| 真实回合持久化         | completed，input 6591 / output 12 tokens  |
+
+Codex 内置浏览器技能可见但当前没有提供可调用的浏览器入口，因此沿用第 1 阶段已验证的本机 Playwright 路径。受控 QA 使用独立 SQLite 和跨进程 OpenAI 兼容服务；真实验收使用 `https://api.a6api.com/v1` 与 `gpt-5.6-sol`，验证了真实流式回答、SQLite 持久化和刷新恢复。API Key 未写入数据库、日志或 Git。

@@ -7,7 +7,9 @@ import {
   Gauge,
   Sparkles,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
+import { chatApi } from "../../services/chat";
 import { useUiStore } from "../../stores/uiStore";
 
 function Metric({
@@ -40,41 +42,41 @@ function Metric({
 export function AgentSidebar() {
   const collapsed = useUiStore((state) => state.statusCollapsed);
   const toggle = useUiStore((state) => state.toggleStatus);
+  const setting = useQuery({
+    queryKey: ["model-setting", "main"],
+    queryFn: chatApi.getModelSetting,
+  });
 
   return (
     <aside className={`agent-sidebar ${collapsed ? "is-collapsed" : ""}`}>
       <header>
         <div>
           <span>Agent 状态</span>
-          <small>Mock 数据</small>
+          <small>第 2 阶段实时状态</small>
         </div>
         <i aria-label="系统在线" />
       </header>
       <div className="agent-sidebar__content">
         <Metric
-          label="读取 Token"
-          value="999,981,568"
-          detail="本轮已用 18,432"
-          percent={72}
+          label="主对话模型"
+          value={setting.data?.model ?? "读取中…"}
+          detail={
+            setting.data?.has_api_key ? "环境密钥已就绪" : "缺少 OPENAI_API_KEY"
+          }
+          percent={setting.data?.has_api_key ? 100 : 8}
+          tone={setting.data?.has_api_key ? "green" : "amber"}
         />
         <Metric
           label="输出 Token"
-          value="99,997,814"
-          detail="本轮已用 2,186"
-          percent={54}
+          value="第 4 阶段接入"
+          detail="Provider usage 已可记录"
+          percent={0}
         />
         <Metric
           label="长期记忆"
-          value="7,360 / 18,000"
-          detail="实时增量 286 / 2,000 字符"
-          percent={41}
-        />
-        <Metric
-          label="下次整理"
-          value="还差 7 回合"
-          detail="已完成 13 / 20 回合"
-          percent={65}
-          tone="amber"
+          value="第 5 阶段接入"
+          detail="当前不显示虚构占用"
+          percent={0}
         />
 
         <section className="status-card skill-card">
@@ -82,8 +84,8 @@ export function AgentSidebar() {
             <span>当前 Skill</span>
             <Sparkles size={16} />
           </div>
-          <strong>项目开发协作</strong>
-          <p>已加载 1 / 3</p>
+          <strong>第 7 阶段接入</strong>
+          <p>当前没有加载 Skill</p>
         </section>
 
         <section className="status-card jobs-card">
@@ -92,10 +94,10 @@ export function AgentSidebar() {
             <Clock3 size={16} />
           </div>
           <p>
-            <CircleCheck size={14} /> 记忆增量同步 <b>完成</b>
+            <CircleCheck size={14} /> 会话持久化 <b>就绪</b>
           </p>
           <p>
-            <Database size={14} /> 数据快照 <b>空闲</b>
+            <Database size={14} /> WebSocket 流式 <b>就绪</b>
           </p>
           <p>
             <Gauge size={14} /> 认知整理 <b>待触发</b>

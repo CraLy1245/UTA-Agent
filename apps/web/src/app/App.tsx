@@ -16,7 +16,7 @@ export function App() {
         <Route path="/skills" element={<SkillsPage />} />
         <Route path="/activity" element={<ActivityPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="*" element={<Navigate to="/chat/mock-1" replace />} />
+        <Route path="*" element={<Navigate to="/chat/new" replace />} />
       </Route>
     </Routes>
   );
