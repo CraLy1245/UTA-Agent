@@ -57,6 +57,7 @@ function changeLabel(units: number | undefined): string {
 
 export function AgentSidebar() {
   const { conversationId = "new" } = useParams();
+  const activeConversationId = conversationId === "new" ? undefined : conversationId;
   const collapsed = useUiStore((state) => state.statusCollapsed);
   const toggle = useUiStore((state) => state.toggleStatus);
   const setting = useQuery({
@@ -65,7 +66,7 @@ export function AgentSidebar() {
   });
   const survival = useQuery({
     queryKey: ["survival-status", conversationId],
-    queryFn: () => chatApi.getSurvivalStatus(conversationId),
+    queryFn: () => chatApi.getSurvivalStatus(activeConversationId),
   });
   const transactions = useQuery({
     queryKey: ["token-transactions"],
@@ -121,7 +122,7 @@ export function AgentSidebar() {
       <header>
         <div>
           <span>Agent 状态</span>
-          <small>第 6 阶段认知整理</small>
+          <small>第 7 阶段 Skill 演化</small>
         </div>
         <i aria-label="系统在线" />
       </header>
@@ -188,8 +189,17 @@ export function AgentSidebar() {
             <span>当前 Skill</span>
             <Sparkles size={16} />
           </div>
-          <strong>第 7 阶段接入</strong>
-          <p>当前没有加载 Skill</p>
+          <strong>
+            {survival.data?.latest_turn?.skill_revision_ids?.length ?? 0} 个
+            Revision
+          </strong>
+          <p>
+            {survival.data?.latest_turn?.skill_revision_ids?.length
+              ? survival.data.latest_turn.skill_revision_ids
+                  .map((id) => id.slice(0, 8))
+                  .join(" · ")
+              : "最近回合没有加载 Skill"}
+          </p>
         </section>
 
         <section className="status-card jobs-card">

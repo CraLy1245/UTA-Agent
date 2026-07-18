@@ -70,6 +70,15 @@ Cognitive Worker ─ strict JSON proposal ─ deterministic commit validator
 - 正式检索优先核心/锁定/高优先级 4,000 字符，再以 SQLite FTS5 选择相关 6,000 字符，实时增量最多 2,000 字符；execution trace 保存实际注入 revision IDs。
 - 本阶段 `skill_index` 和 `skill_operations` 必须为空，不实现第 7 阶段 Skill 演化。
 
+## 第 7 阶段 Skill 演化边界
+
+- 7A：Registry 以稳定 Skill ID + 不可变 Revision 工作。Worker 先读索引；只有批次中实际负反馈关联的 Skill 才提供全文。自动新建必须有至少 3 个真实来源回合，或用户明确要求保存为 Skill。
+- 主回合以关键词、说明、内容和权重进行可重放排序，最多加载 3 个且总计不超过 8,000 字符。Context Builder 注入选中的完整 Revision，成功 trace 和 `skill_usage` 保存同一组实际 IDs。
+- 7B：稳定版本不会被负反馈直接覆盖。Worker 只能创建单个 Candidate；候选固定在每第 10 次符合场景的使用中路由，取消或失败不形成 usage。
+- 候选至少 5 次有效使用后，按满意度 60%、任务完成 20%、客观验证 15%、Token 效率 5% 生成确定性证据；晋升还必须满足满意率高 10 个百分点、客观通过不下降、Token 增幅不超 50% 且无连续两次失败。
+- 晋升后的前 5 次是观察期；严重客观失败或连续两次不满意自动恢复上一稳定 Revision。锁定、暂停、手动晋升/拒绝/回滚始终优先。
+- survival reward 仍只操作 Token 账本；quality feedback 只更新实际 Skill Revision 的质量统计，两者由同一回合关联但不互相改变计算。
+
 ## 长期可替换性
 
 - Provider 通过 `ProviderConfig` 和流式事件接口接入，避免绑定单一模型供应商。

@@ -392,3 +392,121 @@ class CognitiveJob(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Skill(Base):
+    __tablename__ = "skills"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    content: Mapped[str] = mapped_column(Text(), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    locked: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    use_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    success_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    failure_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    selection_weight: Mapped[float] = mapped_column(Float(), nullable=False, default=1.0)
+    confidence_score: Mapped[float] = mapped_column(Float(), nullable=False, default=0.5)
+    exploration_rate: Mapped[float] = mapped_column(Float(), nullable=False, default=0.1)
+    stable_revision_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    candidate_revision_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, unique=True
+    )
+    rollback_revision_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    candidate_paused: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    consecutive_failures: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    promotion_observation_remaining: Mapped[int] = mapped_column(
+        Integer(), nullable=False, default=0
+    )
+    created_by: Mapped[str] = mapped_column(String(32), nullable=False)
+    last_evaluated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    @property
+    def satisfaction_rate(self) -> float | None:
+        rated = self.success_count + self.failure_count
+        return self.success_count / rated if rated else None
+
+
+class SkillRevision(Base):
+    __tablename__ = "skill_revisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    skill_id: Mapped[str] = mapped_column(
+        ForeignKey("skills.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    previous_revision_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    operation: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    content: Mapped[str] = mapped_column(Text(), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    expected_improvement: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    source_turn_ids_json: Mapped[str] = mapped_column(Text(), nullable=False, default="[]")
+    cognitive_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    created_by: Mapped[str] = mapped_column(String(32), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(250), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    promoted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def source_turn_ids(self) -> list[str]:
+        value = json.loads(self.source_turn_ids_json)
+        return value if isinstance(value, list) else []
+
+
+class SkillUsage(Base):
+    __tablename__ = "skill_usage"
+    __table_args__ = (
+        UniqueConstraint("turn_id", "skill_revision_id", name="uq_skill_usage_turn_revision"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    skill_id: Mapped[str] = mapped_column(
+        ForeignKey("skills.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    skill_revision_id: Mapped[str] = mapped_column(
+        ForeignKey("skill_revisions.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    turn_id: Mapped[str] = mapped_column(
+        ForeignKey("turns.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    result: Mapped[str] = mapped_column(String(32), nullable=False)
+    feedback: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    objective_passed: Mapped[bool | None] = mapped_column(Boolean(), nullable=True)
+    input_tokens: Mapped[int] = mapped_column(BigInteger(), nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(BigInteger(), nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class SkillEvolutionEvent(Base):
+    __tablename__ = "skill_evolution_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    skill_id: Mapped[str] = mapped_column(
+        ForeignKey("skills.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision_id: Mapped[str | None] = mapped_column(
+        ForeignKey("skill_revisions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    cognitive_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    reason: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    evidence_json: Mapped[str] = mapped_column(Text(), nullable=False, default="{}")
+    idempotency_key: Mapped[str] = mapped_column(String(250), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def evidence(self) -> dict[str, object]:
+        value = json.loads(self.evidence_json)
+        return value if isinstance(value, dict) else {}

@@ -21,6 +21,7 @@ class TurnUsageSummary(BaseModel):
     output_tokens: int
     read_change_units: int
     output_change_units: int
+    skill_revision_ids: list[str]
     completed_at: datetime
 
 

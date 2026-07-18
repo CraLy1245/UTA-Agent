@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://survival-agent.local/contracts/skill-evolution-event.json",
+  "title": "Structured Skill Evolution WebSocket Event",
+  "type": "object",
+  "required": ["event", "timestamp", "skill_id", "revision_id", "job_id", "data"],
+  "properties": {
+    "event": { "enum": ["skill.created", "skill.updated", "skill.locked", "skill.unlocked", "skill.archived", "skill.restored", "skill.merged", "skill.rolled_back", "skill.candidate_created", "skill.candidate_started", "skill.candidate_evaluated", "skill.candidate_paused", "skill.candidate_promoted", "skill.candidate_rejected", "skill.auto_rollback"] },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "skill_id": { "type": "string", "format": "uuid" },
+    "revision_id": { "type": ["string", "null"] },
+    "job_id": { "type": ["string", "null"] },
+    "data": {
+      "type": "object",
+      "required": ["reason", "evidence"],
+      "properties": {
+        "reason": { "type": ["string", "null"] },
+        "evidence": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

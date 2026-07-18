@@ -67,6 +67,15 @@
 
 正式额度只统计 active `memory_items.char_count`，上限 18,000；实时额度只统计有效 `memory_delta`，上限 2,000。历史 revision、snapshot、archived/superseded item 不计入额度且不会永久删除。`current_revision_id`、`previous_revision_id`、来源 IDs 与 Job IDs 部分采用逻辑审计关联，提交校验负责一致性，避免 SQLite 循环外键阻碍原子版本切换。
 
+## 第 7 阶段表
+
+- `skills`：当前可用视图、锁定/归档状态、使用/满意/失败统计、选择权重、稳定与候选 Revision、回滚保护和观察期。
+- `skill_revisions`：保存每次创建、更新、合并、候选、晋升、拒绝、归档和回滚所对应的完整内容、前一 Revision、来源回合、Job、原因、预期改进及唯一幂等键。
+- `skill_usage`：以 `turn_id + skill_revision_id` 唯一，保存本轮实际版本、完成状态、最新质量反馈、客观通过及独立 Token 用量。
+- `skill_evolution_events`：不可变演化审计，保存 Skill/Revision/Job、事件类型、原因、确定性评估证据和唯一幂等键。
+
+稳定与候选指针是核心独立字段，不藏入 JSON。来源列表和评估证据使用 JSON，但必须通过服务层验证真实 ID、锁定、基础 Revision、阈值与幂等性。归档和拒绝只改变生命周期状态，不删除历史。
+
 ## 数据路径
 
 开发默认数据库：`data/survival_agent.db`。路径可通过 `SURVIVAL_AGENT_DATABASE_URL` 覆盖。数据库文件、WAL 和共享内存文件均不提交 Git。

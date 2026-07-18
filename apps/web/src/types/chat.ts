@@ -90,6 +90,7 @@ export type SurvivalStatus = {
     output_tokens: number;
     read_change_units: number;
     output_change_units: number;
+    skill_revision_ids: string[];
     completed_at: string;
   } | null;
 };
@@ -188,6 +189,81 @@ export type CognitiveJob = {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+};
+
+export type Skill = {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  status: "active" | "archived";
+  locked: boolean;
+  use_count: number;
+  success_count: number;
+  failure_count: number;
+  selection_weight: number;
+  confidence_score: number;
+  exploration_rate: number;
+  stable_revision_id: string;
+  candidate_revision_id: string | null;
+  rollback_revision_id: string | null;
+  candidate_paused: boolean;
+  consecutive_failures: number;
+  promotion_observation_remaining: number;
+  satisfaction_rate: number | null;
+  created_by: string;
+  last_evaluated_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SkillRevision = {
+  id: string;
+  skill_id: string;
+  previous_revision_id: string | null;
+  operation: string;
+  status: "stable" | "candidate" | "rejected" | "superseded" | "archived" | "rejected_after_promotion";
+  name: string;
+  description: string;
+  content: string;
+  reason: string | null;
+  expected_improvement: string | null;
+  source_turn_ids: string[];
+  cognitive_job_id: string | null;
+  created_by: string;
+  created_at: string;
+  promoted_at: string | null;
+};
+
+export type SkillUsage = {
+  id: string;
+  skill_id: string;
+  skill_revision_id: string;
+  turn_id: string;
+  result: string;
+  feedback: "satisfied" | "unsatisfied" | null;
+  objective_passed: boolean | null;
+  input_tokens: number;
+  output_tokens: number;
+  created_at: string;
+};
+
+export type SkillEvolutionEvent = {
+  id: string;
+  skill_id: string;
+  revision_id: string | null;
+  cognitive_job_id: string | null;
+  event_type: string;
+  reason: string | null;
+  evidence: Record<string, unknown>;
+  created_at: string;
+};
+
+export type SkillEvolution = {
+  skill: Skill;
+  revisions: SkillRevision[];
+  usages: SkillUsage[];
+  events: SkillEvolutionEvent[];
 };
 
 export type StreamEvent = {

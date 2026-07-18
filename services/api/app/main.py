@@ -11,6 +11,7 @@ from services.api.app.api.conversations import turn_router
 from services.api.app.api.health import router as health_router
 from services.api.app.api.memory import router as memory_router
 from services.api.app.api.model_settings import router as model_settings_router
+from services.api.app.api.skills import router as skills_router
 from services.api.app.api.survival import router as survival_router
 from services.api.app.api.survival import turn_router as survival_turn_router
 from services.api.app.api.tools import router as tools_router
@@ -49,6 +50,7 @@ app.include_router(cognitive_jobs_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
 app.include_router(turn_router, prefix="/api")
 app.include_router(model_settings_router, prefix="/api")
+app.include_router(skills_router, prefix="/api")
 app.include_router(survival_router, prefix="/api")
 app.include_router(survival_turn_router, prefix="/api")
 app.include_router(tools_router, prefix="/api")

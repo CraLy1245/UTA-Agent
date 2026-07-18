@@ -2,6 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from services.agent.runtime import cancellation_registry, run_turn
 from services.memory.cognitive import cognitive_event_hub
+from services.skills.service import skill_event_hub
 
 router = APIRouter(tags=["streaming"])
 
@@ -26,3 +27,16 @@ async def stream_cognitive_jobs(websocket: WebSocket) -> None:
         pass
     finally:
         cognitive_event_hub.unsubscribe(queue)
+
+
+@router.websocket("/ws/skill-events")
+async def stream_skill_events(websocket: WebSocket) -> None:
+    await websocket.accept()
+    queue = skill_event_hub.subscribe()
+    try:
+        while True:
+            await websocket.send_json(await queue.get())
+    except WebSocketDisconnect:
+        pass
+    finally:
+        skill_event_hub.unsubscribe(queue)

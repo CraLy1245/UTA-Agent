@@ -24,6 +24,7 @@ from services.api.app.schemas.survival import (
     TokenTransactionRead,
     TurnUsageSummary,
 )
+from services.skills.service import apply_quality_feedback
 from services.survival.ledger import UNITS_PER_TOKEN
 from services.survival.quality_feedback import record_quality_feedback
 from services.survival.reward import grant_survival_reward, reward_was_granted
@@ -51,6 +52,7 @@ def get_survival_status(db: SessionDep, conversation_id: str | None = None) -> S
             output_tokens=latest_trace.output_tokens,
             read_change_units=-(latest_trace.input_tokens * UNITS_PER_TOKEN),
             output_change_units=-(latest_trace.output_tokens * UNITS_PER_TOKEN),
+            skill_revision_ids=latest_trace.skill_revision_ids,
             completed_at=latest_turn.completed_at,
         )
     return SurvivalStatusRead(
@@ -91,6 +93,7 @@ def create_feedback(turn_id: str, payload: FeedbackCreate, db: SessionDep) -> Fe
     feedback = record_quality_feedback(
         db, turn=turn, rating=payload.rating, comment=payload.comment
     )
+    apply_quality_feedback(db, turn_id=turn.id, rating=payload.rating)
     reward_entries = (
         grant_survival_reward(db, feedback_event=feedback, trace=trace)
         if payload.rating == "satisfied"

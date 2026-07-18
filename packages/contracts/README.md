@@ -1,3 +1,3 @@
 # Contracts
 
-当前包含结构化 WebSocket 信封、第 4 阶段质量反馈/生存奖励分离与基础 execution trace 契约，以及第 5 阶段 `memory.delta_created` 数据契约。正式记忆操作和 Skill 操作 Schema 将在对应阶段加入，不提前冻结尚未实现的业务逻辑。
+当前包含结构化 WebSocket 信封、质量反馈/生存奖励分离、execution trace、实时记忆，以及第 7 阶段严格 Skill 操作与演化事件契约。`skill-operations.json` 约束 Worker 只能提出可验证操作；`skill-evolution-event.json` 约束候选创建、评估、晋升、拒绝和自动回滚事件。

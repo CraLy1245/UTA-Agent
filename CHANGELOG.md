@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.0 - 2026-07-18
+
+### Added
+
+- 添加真实 `skills`、`skill_revisions`、`skill_usage` 与 `skill_evolution_events` SQLite/Alembic 持久化及审计 API。
+- 添加 Skill Registry、最多 3 个/8,000 字符动态检索，并在 execution trace 中保存实际加载 Revision IDs。
+- 添加严格 Worker Skill 操作、三次复用阈值、锁定/归档/合并/版本冲突校验与不可变 Revision。
+- 添加 Candidate/Stable/Superseded/Rejected 生命周期、确定性 9:1 路由、最少 5 次评估、晋升/拒绝与晋升后自动回滚。
+- 添加完整 Skill 管理/演化页面、后台演化链，以及独立结构化 Skill WebSocket 事件。
+
+### Changed
+
+- Cognitive Worker 现在读取 Skill 索引、实际 Skill Revision trace、质量反馈和客观结果；只有确定性验证通过后才提交 Skill 操作。
+- 质量反馈按回合准确归因到实际 Skill Revision，评价修改重算统计，不会重复影响 Token 奖励。
+
+### Security
+
+- 候选不得删除稳定版本的 `success_criteria` 或安全约束；锁定 Skill 禁止后台修改或创建候选。
+- Skill 表、Revision、事件、契约、日志和测试均不保存 API Key；生存奖励与质量评分继续保持业务分离。
+
 ## 0.7.0 - 2026-07-18
 
 ### Added

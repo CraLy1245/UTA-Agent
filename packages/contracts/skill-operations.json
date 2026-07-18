@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://survival-agent.local/contracts/skill-operations.json",
+  "title": "Validated Cognitive Worker Skill Operation",
+  "type": "object",
+  "required": ["operation", "skill_ids", "source_turn_ids", "expected_revision_ids"],
+  "properties": {
+    "operation": { "enum": ["add", "update", "merge", "archive", "create_candidate_revision", "noop"] },
+    "skill_ids": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+    "name": { "type": ["string", "null"], "maxLength": 120 },
+    "description": { "type": ["string", "null"], "maxLength": 500 },
+    "content": { "type": ["string", "null"], "maxLength": 4000 },
+    "base_revision_id": { "type": ["string", "null"] },
+    "expected_revision_ids": { "type": "object", "additionalProperties": { "type": "string" } },
+    "source_turn_ids": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+    "reason": { "type": ["string", "null"], "maxLength": 1000 },
+    "expected_improvement": { "type": ["string", "null"], "maxLength": 1000 }
+  },
+  "additionalProperties": false
+}

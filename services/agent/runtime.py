@@ -22,6 +22,13 @@ from services.api.app.db.models import MemoryDelta, Message, ModelSetting, ToolE
 from services.api.app.db.session import SessionLocal
 from services.memory.cognitive import record_completed_turn
 from services.memory.realtime_delta import MemoryContext, build_memory_context
+from services.skills.service import (
+    SelectedSkill,
+    record_skill_usage,
+    retrieve_skills,
+    skill_context,
+    skill_event_hub,
+)
 from services.survival.ledger import balance_context, balances, debit_completed_turn
 
 
@@ -207,6 +214,7 @@ async def _run_model_loop(
     cancel_event: asyncio.Event,
     survival_context: str,
     memory_context: MemoryContext,
+    selected_skills: list[SelectedSkill],
 ) -> tuple[str, list[dict[str, Any]]]:
     settings = get_settings()
     tools = _tool_runtime() if settings.tools_enabled else None
@@ -231,6 +239,9 @@ async def _run_model_loop(
     messages.insert(1, {"role": "system", "content": survival_context})
     if memory_context.content is not None:
         messages.insert(2, {"role": "system", "content": memory_context.content})
+    selected_skill_context = skill_context(selected_skills)
+    if selected_skill_context is not None:
+        messages.insert(3, {"role": "system", "content": selected_skill_context})
 
     for _ in range(settings.max_model_loops):
         if cancel_event.is_set():
@@ -364,6 +375,7 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                 available_before=turn.created_at,
                 query_text=user_message.content,
             )
+            selected_skills = retrieve_skills(db, query=user_message.content)
             captured_delta = db.scalar(
                 select(MemoryDelta)
                 .where(MemoryDelta.source_turn_id == turn.id)
@@ -403,6 +415,7 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                     cancel_event=cancel_event,
                     survival_context=survival_context,
                     memory_context=memory_context,
+                    selected_skills=selected_skills,
                 )
         except asyncio.CancelledError:
             with SessionLocal() as db:
@@ -475,7 +488,7 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                 completed_at.replace(tzinfo=None) if started_at.tzinfo is None else completed_at
             )
             latency_ms = int((completed_for_latency - started_at).total_seconds() * 1000)
-            _, debit_transactions = debit_completed_turn(
+            trace, debit_transactions = debit_completed_turn(
                 db,
                 turn=current_turn,
                 model_id=model_id,
@@ -484,12 +497,21 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                 tool_names=tool_names,
                 tool_outcomes=tool_outcomes,
                 memory_revision_ids=memory_context.revision_ids,
+                skill_revision_ids=[item.revision_id for item in selected_skills],
                 latency_ms=latency_ms,
+            )
+            skill_events = record_skill_usage(
+                db,
+                turn=current_turn,
+                trace=trace,
+                selected=selected_skills,
             )
             cognitive_job = record_completed_turn(db, current_turn)
             db.flush()
             account_snapshot = balances(db)
             db.commit()
+            for skill_event in skill_events:
+                await skill_event_hub.publish(skill_event)
             await websocket.send_json(
                 websocket_event(
                     "usage.updated",

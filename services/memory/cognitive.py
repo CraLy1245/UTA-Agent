@@ -22,6 +22,9 @@ from services.api.app.db.models import (
     MemoryRevision,
     Message,
     ModelSetting,
+    Skill,
+    SkillEvolutionEvent,
+    SkillUsage,
     ToolExecution,
     Turn,
     TurnExecutionTrace,
@@ -34,6 +37,14 @@ from services.memory.formal import (
     formal_char_count,
 )
 from services.memory.realtime_delta import ACTIVE_STATUSES
+from services.skills.service import (
+    archive_skill,
+    create_candidate,
+    create_skill,
+    merge_skills,
+    skill_event_hub,
+    update_stable_skill,
+)
 
 JOB_TYPE = "memory_consolidation"
 WINDOW_SIZE = 20
@@ -113,11 +124,58 @@ class MemoryOperation(BaseModel):
         return self
 
 
+class SkillOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: str
+    skill_ids: list[str] = Field(default_factory=list)
+    name: str | None = Field(default=None, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    content: str | None = Field(default=None, max_length=4_000)
+    base_revision_id: str | None = None
+    expected_revision_ids: dict[str, str] = Field(default_factory=dict)
+    source_turn_ids: list[str] = Field(default_factory=list)
+    reason: str | None = Field(default=None, max_length=1000)
+    expected_improvement: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("operation")
+    @classmethod
+    def valid_operation(cls, value: str) -> str:
+        allowed = {"add", "update", "merge", "archive", "create_candidate_revision", "noop"}
+        if value not in allowed:
+            raise ValueError("unsupported Skill operation")
+        return value
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> SkillOperation:
+        if self.operation == "add" and (
+            not self.name or not self.description or not self.content or not self.source_turn_ids
+        ):
+            raise ValueError("Skill add requires name, description, content and sources")
+        if self.operation == "update" and (len(self.skill_ids) != 1 or not self.content):
+            raise ValueError("Skill update requires one id and content")
+        if self.operation == "merge" and (len(self.skill_ids) < 2 or not self.content):
+            raise ValueError("Skill merge requires two ids and content")
+        if self.operation == "archive" and len(self.skill_ids) != 1:
+            raise ValueError("Skill archive requires one id")
+        if self.operation == "create_candidate_revision" and (
+            len(self.skill_ids) != 1
+            or not self.base_revision_id
+            or not self.content
+            or not self.reason
+            or not self.expected_improvement
+            or not self.source_turn_ids
+        ):
+            raise ValueError(
+                "candidate requires Skill, base, content, reason, improvement, sources"
+            )
+        return self
+
+
 class CognitiveResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     summary: str = Field(max_length=2000)
     memory_operations: list[MemoryOperation] = Field(max_length=200)
-    skill_operations: list[dict[str, object]] = Field(default_factory=list, max_length=0)
+    skill_operations: list[SkillOperation] = Field(default_factory=list, max_length=100)
     consumed_delta_ids: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
@@ -252,8 +310,10 @@ def build_job_payload(db: Session, job: CognitiveJob) -> dict[str, object]:
                 "feedback": [{"rating": f.rating, "comment": f.comment} for f in feedback],
                 "trace": {
                     "memory_revision_ids": trace.memory_revision_ids,
+                    "skill_revision_ids": trace.skill_revision_ids,
                     "model": trace.model_id,
                     "usage": trace.normalized_usage,
+                    "objective_result": trace.objective_result,
                 }
                 if trace
                 else None,
@@ -273,6 +333,18 @@ def build_job_payload(db: Session, job: CognitiveJob) -> dict[str, object]:
             .order_by(MemoryDelta.priority.desc())
         )
     )
+    skills = list(
+        db.scalars(select(Skill).where(Skill.status == "active").order_by(Skill.updated_at.desc()))
+    )
+    negative_skill_ids = {
+        usage.skill_id
+        for usage in db.scalars(
+            select(SkillUsage).where(
+                SkillUsage.turn_id.in_(valid_turn_ids),
+                SkillUsage.feedback == "unsatisfied",
+            )
+        )
+    }
     return {
         "job": {"id": job.id, "start": job.start_turn_number, "end": job.end_turn_number},
         "formal_memory": [
@@ -299,7 +371,30 @@ def build_job_payload(db: Session, job: CognitiveJob) -> dict[str, object]:
         ],
         "turns": turn_data,
         "valid_turn_ids": sorted(valid_turn_ids),
-        "skill_index": [],
+        "skill_index": [
+            {
+                "id": skill.id,
+                "name": skill.name,
+                "description": skill.description,
+                "use_count": skill.use_count,
+                "success_count": skill.success_count,
+                "failure_count": skill.failure_count,
+                "locked": skill.locked,
+                "stable_revision_id": skill.stable_revision_id,
+                "candidate_revision_id": skill.candidate_revision_id,
+                "updated_at": skill.updated_at.isoformat(),
+            }
+            for skill in skills
+        ],
+        "skill_documents": [
+            {
+                "id": skill.id,
+                "stable_revision_id": skill.stable_revision_id,
+                "content": skill.content,
+            }
+            for skill in skills
+            if skill.id in negative_skill_ids
+        ],
     }
 
 
@@ -325,7 +420,15 @@ async def request_cognitive_result(payload: dict[str, object]) -> CognitiveResul
         "You consolidate agent memory. Return ONE strict JSON object only. Never emit markdown. "
         "Use only add/update/merge/archive/noop. Never modify locked memory. Every new fact needs "
         "source_turn_ids from the supplied exact 20 turns. Keep active formal memory <=18000 "
-        "characters. Consume only supplied delta ids. skill_operations MUST be []. "
+        "characters. Consume only supplied delta ids. Skill changes must use skill_operations. "
+        "Prefer updating or merging an existing general Skill. Add a new Skill only after three "
+        "traceable similar turns or an explicit request to save a Skill. "
+        "Never modify locked Skills. "
+        "Never replace a stable Skill directly because of negative feedback: use "
+        "create_candidate_revision with its current stable_revision_id, traceable negative source "
+        "turns, reason, and expected_improvement. Candidate content must retain "
+        "success_criteria and "
+        "safety constraints. Use only add/update/merge/archive/create_candidate_revision/noop. "
         "The exact required top-level keys are summary, memory_operations, skill_operations, "
         "consumed_delta_ids, warnings. summary is always required. consumed_delta_ids belongs only "
         "at the top level; never put delta_ids inside a memory operation. For add, title, content, "
@@ -354,6 +457,107 @@ async def request_cognitive_result(payload: dict[str, object]) -> CognitiveResul
         raise ValueError(f"model output failed strict validation: {exc}") from exc
 
 
+def _explicit_skill_request(payload: dict[str, object], source_turn_ids: set[str]) -> bool:
+    markers = ("保存为 skill", "保存成 skill", "记为 skill", "save as a skill")
+    for turn in payload["turns"]:  # type: ignore[assignment]
+        if str(turn["turn_id"]) not in source_turn_ids:
+            continue
+        for message in turn["messages"]:
+            if message["role"] == "user" and any(
+                marker in str(message["content"]).casefold() for marker in markers
+            ):
+                return True
+    return False
+
+
+def _apply_skill_operations(
+    db: Session,
+    *,
+    job: CognitiveJob,
+    operations: list[SkillOperation],
+    payload: dict[str, object],
+    valid_turn_ids: set[str],
+) -> dict[str, int]:
+    counts = {
+        name: 0
+        for name in ("add", "update", "merge", "archive", "create_candidate_revision", "noop")
+    }
+    for index, operation in enumerate(operations):
+        counts[operation.operation] += 1
+        source_ids = set(operation.source_turn_ids)
+        if not source_ids.issubset(valid_turn_ids):
+            raise ValueError("Skill operation references an unknown turn")
+        skills = [db.get(Skill, skill_id) for skill_id in operation.skill_ids]
+        if any(skill is None for skill in skills):
+            raise ValueError("Skill operation references an unknown Skill")
+        concrete = [skill for skill in skills if skill is not None]
+        operation_key = f"worker:{job.id}:{index}:{operation.operation}"
+        if operation.operation == "add":
+            create_skill(
+                db,
+                name=operation.name or "",
+                description=operation.description or "",
+                content=operation.content or "",
+                source_turn_ids=operation.source_turn_ids,
+                created_by="cognitive_worker",
+                reason=operation.reason or "Reusable pattern found",
+                idempotency_key=operation_key,
+                job_id=job.id,
+                allow_single_source=_explicit_skill_request(payload, source_ids),
+            )
+        elif operation.operation == "update":
+            skill = concrete[0]
+            expected = operation.expected_revision_ids.get(skill.id)
+            if expected is None:
+                raise ValueError("Skill update requires expected revision id")
+            update_stable_skill(
+                db,
+                skill=skill,
+                name=operation.name,
+                description=operation.description,
+                content=operation.content or "",
+                expected_revision_id=expected,
+                source_turn_ids=operation.source_turn_ids,
+                created_by="cognitive_worker",
+                reason=operation.reason or "Worker update",
+                idempotency_key=operation_key,
+                job_id=job.id,
+            )
+        elif operation.operation == "merge":
+            merge_skills(
+                db,
+                target=concrete[0],
+                source_skills=concrete[1:],
+                content=operation.content or "",
+                expected_revision_ids=operation.expected_revision_ids,
+                source_turn_ids=operation.source_turn_ids,
+                reason=operation.reason or "Worker merge",
+                idempotency_key=operation_key,
+                created_by="cognitive_worker",
+                job_id=job.id,
+            )
+        elif operation.operation == "archive":
+            skill = concrete[0]
+            expected = operation.expected_revision_ids.get(skill.id)
+            if expected != skill.stable_revision_id:
+                raise ValueError("Skill revision conflict")
+            archive_skill(db, skill, reason=operation.reason or "Worker archive")
+        elif operation.operation == "create_candidate_revision":
+            skill = concrete[0]
+            create_candidate(
+                db,
+                skill=skill,
+                base_revision_id=operation.base_revision_id or "",
+                content=operation.content or "",
+                source_turn_ids=operation.source_turn_ids,
+                reason=operation.reason or "Negative feedback",
+                expected_improvement=operation.expected_improvement or "Improve quality",
+                idempotency_key=operation_key,
+                job_id=job.id,
+            )
+    return counts
+
+
 def apply_result(
     db: Session, job: CognitiveJob, result: CognitiveResult, payload: dict[str, object]
 ) -> dict[str, int]:
@@ -372,7 +576,8 @@ def apply_result(
         operation.content for operation in result.memory_operations if operation.content
     ]
     existing_contents = [
-        str(item["content"]) for item in payload["formal_memory"]  # type: ignore[index]
+        str(item["content"])
+        for item in payload["formal_memory"]  # type: ignore[index]
     ]
     delta_by_id = {
         str(delta["id"]): str(delta["content"])
@@ -493,6 +698,13 @@ def apply_result(
                 reason=operation.reason,
                 job_id=job.id,
             )
+    skill_counts = _apply_skill_operations(
+        db,
+        job=current_job,
+        operations=result.skill_operations,
+        payload=payload,
+        valid_turn_ids=valid_turn_ids,
+    )
     db.flush()
     if formal_char_count(db) > FORMAL_MEMORY_CHAR_LIMIT:
         raise ValueError("projected formal memory exceeds 18000 characters")
@@ -512,7 +724,12 @@ def apply_result(
     current_job.completed_at = datetime.now(UTC)
     current_job.error_message = None
     current_job.result_json = json.dumps(
-        {"summary": result.summary, "counts": counts, "warnings": result.warnings}
+        {
+            "summary": result.summary,
+            "counts": counts,
+            "skill_counts": skill_counts,
+            "warnings": result.warnings,
+        }
     )
     enqueue_due_job(db)
     db.commit()
@@ -563,6 +780,15 @@ class CognitiveWorker:
                 completed = db.get(CognitiveJob, job.id)
                 if completed is not None:
                     await cognitive_event_hub.publish("cognitive.job_completed", completed)
+                skill_events = list(
+                    db.scalars(
+                        select(SkillEvolutionEvent)
+                        .where(SkillEvolutionEvent.cognitive_job_id == job.id)
+                        .order_by(SkillEvolutionEvent.created_at, SkillEvolutionEvent.id)
+                    )
+                )
+                for skill_event in skill_events:
+                    await skill_event_hub.publish(skill_event)
         except Exception as exc:
             mark_failure(job.id, exc)
             with SessionLocal() as db:

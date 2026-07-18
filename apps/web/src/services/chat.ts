@@ -9,6 +9,9 @@ import type {
   MemoryStatus,
   ModelSetting,
   SurvivalStatus,
+  Skill,
+  SkillEvolution,
+  SkillEvolutionEvent,
   TokenTransaction,
   ToolStatus,
   Turn,
@@ -90,6 +93,25 @@ export const chatApi = {
   rollbackMemory: (itemId: string, revisionId: string) => request<MemoryItem>(`/memory/items/${itemId}/rollback/${revisionId}`, { method: "POST" }),
   getCognitiveJobs: () => request<CognitiveJob[]>("/cognitive-jobs"),
   retryCognitiveJob: (jobId: string) => request<CognitiveJob>(`/cognitive-jobs/${jobId}/retry`, { method: "POST" }),
+  getSkills: (status?: string, query?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (query) params.set("query", query);
+    return request<Skill[]>(`/skills${params.size ? `?${params}` : ""}`);
+  },
+  createSkill: (payload: Pick<Skill, "name" | "description" | "content"> & { reason: string }) =>
+    request<Skill>("/skills", { method: "POST", body: JSON.stringify(payload) }),
+  updateSkill: (skill: Skill, content: string) => request<Skill>(`/skills/${skill.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ expected_revision_id: skill.stable_revision_id, content, reason: "用户编辑" }),
+  }),
+  skillAction: (skillId: string, action: "lock" | "unlock" | "archive" | "restore") =>
+    request<Skill>(`/skills/${skillId}/${action}`, { method: "POST" }),
+  getSkillEvolution: (skillId: string) => request<SkillEvolution>(`/skills/${skillId}/evolution`),
+  getSkillEvolutionEvents: () => request<SkillEvolutionEvent[]>("/skills/evolution-events"),
+  candidateAction: (skillId: string, revisionId: string, action: "promote" | "reject" | "pause", reason: string) =>
+    request<Skill>(`/skills/${skillId}/candidate/${revisionId}/${action}`, { method: "POST", body: JSON.stringify({ reason }) }),
+  rollbackSkill: (skillId: string, revisionId: string) => request<Skill>(`/skills/${skillId}/rollback/${revisionId}`, { method: "POST", body: JSON.stringify({ reason: "用户手动回滚" }) }),
   submitFeedback: (
     turnId: string,
     rating: "satisfied" | "unsatisfied",
