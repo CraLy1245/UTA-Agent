@@ -277,3 +277,21 @@ class TurnExecutionTrace(Base):
     def objective_result(self) -> dict[str, object]:
         value = self._json_value(self.objective_result_json, {})
         return value if isinstance(value, dict) else {}
+
+
+class MemoryDelta(Base):
+    __tablename__ = "memory_delta"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    revision_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    source_turn_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    raw_content: Mapped[str] = mapped_column(Text(), nullable=False)
+    normalized_content: Mapped[str] = mapped_column(Text(), nullable=False, index=True)
+    delta_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="explicit_instruction"
+    )
+    priority: Mapped[int] = mapped_column(Integer(), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    char_count: Mapped[int] = mapped_column(Integer(), nullable=False)
+    consumed_by_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

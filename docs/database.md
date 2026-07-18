@@ -42,6 +42,19 @@
 
 迁移只从第 4 阶段开始建立初始账户；早期回合没有 execution trace，也不会被追溯扣款或伪造 raw Usage。只有 `20260718_0004` 之后真实完成的回合进入账本。
 
+## 第 5 阶段表
+
+`memory_delta` 保存显式实时记忆：UUID、不可变 `revision_id`、来源回合 ID、原始/归一化内容、类型、优先级、状态、Unicode 字符数、未来消费 Job ID 和 UTC 创建时间。
+
+当前状态包括：
+
+- `pending`：计入 2,000 字符实时额度并从下一回合开始注入。
+- `deferred_capacity`：因容量不足等待第 6 阶段整理，记录仍完整保留。
+- `duplicate_merged`：与有效指令重复，保留来源审计但不重复占额。
+- `consumed`：为第 6 阶段正式记忆合并预留。
+
+来源回合 ID 以不可变审计值保存，因此用户删除会话时不会级联删除已经形成的记忆。第 6 阶段创建正式记忆与 revision 后，可通过 `consumed_by_job_id` 建立整理链路。
+
 ## 数据路径
 
 开发默认数据库：`data/survival_agent.db`。路径可通过 `SURVIVAL_AGENT_DATABASE_URL` 覆盖。数据库文件、WAL 和共享内存文件均不提交 Git。

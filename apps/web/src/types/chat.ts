@@ -115,6 +115,30 @@ export type FeedbackResult = {
   };
 };
 
+export type MemoryDelta = {
+  id: string;
+  revision_id: string;
+  source_turn_id: string;
+  raw_content: string;
+  delta_type: "explicit_instruction";
+  priority: number;
+  status: "pending" | "deferred_capacity" | "duplicate_merged" | "consumed";
+  char_count: number;
+  consumed_by_job_id: string | null;
+  created_at: string;
+};
+
+export type MemoryStatus = {
+  active_delta_char_count: number;
+  delta_char_limit: number;
+  deferred_delta_char_count: number;
+  pending_count: number;
+  deferred_count: number;
+  formal_memory_char_count: number;
+  formal_memory_char_limit: number;
+  current_memory_version: number | null;
+};
+
 export type StreamEvent = {
   event: string;
   conversation_id: string;
@@ -132,5 +156,15 @@ export type StreamEvent = {
     >;
     turn_change_units?: Record<string, number>;
     tool?: ToolExecution;
+    memory_delta?: Pick<
+      MemoryDelta,
+      | "id"
+      | "revision_id"
+      | "source_turn_id"
+      | "delta_type"
+      | "priority"
+      | "status"
+      | "char_count"
+    >;
   };
 };

@@ -1040,6 +1040,77 @@ button {
 .data-list small svg {
   width: 13px;
 }
+.memory-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.memory-overview article {
+  padding: 18px 20px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.memory-overview article > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #536071;
+  font-size: 11px;
+  font-weight: 700;
+}
+.memory-overview svg {
+  width: 16px;
+  color: var(--green);
+}
+.memory-overview strong {
+  display: block;
+  margin: 10px 0 8px;
+  font-size: 21px;
+}
+.memory-overview .progress-track i {
+  height: 100%;
+  display: block;
+  background: var(--green);
+  border-radius: inherit;
+}
+.memory-overview small,
+.memory-overview p {
+  display: block;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+.memory-list article > div em {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+.memory-list article span.deferred_capacity {
+  color: #a16b16;
+  background: #fff1d2;
+}
+.memory-list article span.duplicate_merged,
+.memory-list article span.consumed {
+  color: #596878;
+  background: #edf1f4;
+}
+.empty-state {
+  margin: 0;
+  padding: 28px;
+  color: var(--muted);
+  background: #fff;
+  border: 1px dashed #cfd7df;
+  border-radius: 9px;
+  text-align: center;
+}
+.empty-state.error {
+  color: #a43b3b;
+  border-color: #e5bcbc;
+}
 .skill-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1342,6 +1413,9 @@ button {
     padding-inline: 24px;
   }
   .skill-grid {
+    grid-template-columns: 1fr;
+  }
+  .memory-overview {
     grid-template-columns: 1fr;
   }
 }

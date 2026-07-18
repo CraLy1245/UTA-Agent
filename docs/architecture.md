@@ -52,6 +52,14 @@ Cognitive Worker
 - 奖励键 `reward:{turn_id}:{account_type}` 唯一。评价修改保留历史，已发奖励不撤销，重复满意不增加余额。
 - execution trace 只在成功最终回答后创建；第 4 阶段记录真实模型、工具、Usage、延迟和客观工具摘要，不提前实现记忆或 Skill 竞争。
 
+## 第 5 阶段实时记忆边界
+
+- 回合创建事务使用确定性短语和纠正语义检测明显长期指令，不额外调用模型；引用既有要求的元问句不会被当作新指令。
+- `memory_delta` 立即保存用户原始表达、来源回合、优先级、字符数和不可变 revision ID。当前回合排除自己的增量，下一回合按创建因果顺序重新读取全部有效增量。
+- Memory Context 是独立动态 system message，不重建固定工具或生存提示。execution trace 只记录实际放入本轮上下文的 revision IDs。
+- 实时有效内容上限为 2,000 Unicode Code Point。重复表达保留审计记录但不重复占额；容量不足时优先保留近期明确纠正，其他记录标记 `deferred_capacity` 而不删除。
+- 第 5 阶段不创建正式长期记忆、Revision/Snapshot、20 回合 Job 或 Worker；这些由第 6 阶段消费实时增量后实现。
+
 ## 长期可替换性
 
 - Provider 通过 `ProviderConfig` 和流式事件接口接入，避免绑定单一模型供应商。

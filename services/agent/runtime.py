@@ -18,8 +18,9 @@ from services.agent.model_provider import (
 from services.agent.tool_runtime import ToolResult, WorkspaceToolRuntime
 from services.agent.usage_normalizer import UsageNormalizer
 from services.api.app.core.config import get_settings
-from services.api.app.db.models import Message, ModelSetting, ToolExecution, Turn
+from services.api.app.db.models import MemoryDelta, Message, ModelSetting, ToolExecution, Turn
 from services.api.app.db.session import SessionLocal
+from services.memory.realtime_delta import MemoryContext, build_memory_context
 from services.survival.ledger import balance_context, balances, debit_completed_turn
 
 
@@ -206,6 +207,7 @@ async def _run_model_loop(
     provider: Any,
     cancel_event: asyncio.Event,
     survival_context: str,
+    memory_context: MemoryContext,
 ) -> tuple[str, list[dict[str, Any]]]:
     settings = get_settings()
     tools = _tool_runtime() if settings.tools_enabled else None
@@ -228,6 +230,8 @@ async def _run_model_loop(
         },
     )
     messages.insert(1, {"role": "system", "content": survival_context})
+    if memory_context.content is not None:
+        messages.insert(2, {"role": "system", "content": memory_context.content})
 
     for _ in range(settings.max_model_loops):
         if cancel_event.is_set():
@@ -354,10 +358,42 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
             provider = _provider_for(setting)
             model_id = setting.model
             survival_context = balance_context(db)
+            excluded_source_turn_ids = {turn.id}
+            if turn.source_turn_id is not None:
+                excluded_source_turn_ids.add(turn.source_turn_id)
+            memory_context = build_memory_context(
+                db,
+                excluded_source_turn_ids=excluded_source_turn_ids,
+                available_before=turn.created_at,
+            )
+            captured_delta = db.scalar(
+                select(MemoryDelta)
+                .where(MemoryDelta.source_turn_id == turn.id)
+                .order_by(MemoryDelta.created_at.desc(), MemoryDelta.id.desc())
+                .limit(1)
+            )
             turn.status = "running"
             turn.started_at = datetime.now(UTC)
             db.commit()
             await websocket.send_json(websocket_event("turn.started", turn, {}))
+            if captured_delta is not None:
+                await websocket.send_json(
+                    websocket_event(
+                        "memory.delta_created",
+                        turn,
+                        {
+                            "memory_delta": {
+                                "id": captured_delta.id,
+                                "revision_id": captured_delta.revision_id,
+                                "source_turn_id": captured_delta.source_turn_id,
+                                "delta_type": captured_delta.delta_type,
+                                "priority": captured_delta.priority,
+                                "status": captured_delta.status,
+                                "char_count": captured_delta.char_count,
+                            }
+                        },
+                    )
+                )
 
         try:
             async with asyncio.timeout(get_settings().turn_timeout_seconds):
@@ -368,6 +404,7 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                     provider=provider,
                     cancel_event=cancel_event,
                     survival_context=survival_context,
+                    memory_context=memory_context,
                 )
         except asyncio.CancelledError:
             with SessionLocal() as db:
@@ -447,6 +484,7 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                 raw_usages=raw_usages,
                 tool_names=tool_names,
                 tool_outcomes=tool_outcomes,
+                memory_revision_ids=memory_context.revision_ids,
                 latency_ms=latency_ms,
             )
             db.flush()

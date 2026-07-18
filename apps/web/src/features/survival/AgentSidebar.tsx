@@ -71,6 +71,10 @@ export function AgentSidebar() {
     queryKey: ["token-transactions"],
     queryFn: () => chatApi.getTokenTransactions(12),
   });
+  const memory = useQuery({
+    queryKey: ["memory-status"],
+    queryFn: chatApi.getMemoryStatus,
+  });
   const readAccount = survival.data?.accounts.find(
     (account) => account.account_type === "read",
   );
@@ -102,7 +106,7 @@ export function AgentSidebar() {
       <header>
         <div>
           <span>Agent 状态</span>
-          <small>第 4 阶段生存账本</small>
+          <small>第 5 阶段实时记忆</small>
         </div>
         <i aria-label="系统在线" />
       </header>
@@ -139,10 +143,29 @@ export function AgentSidebar() {
           tone={outputPercent < 10 ? "amber" : "green"}
         />
         <Metric
-          label="长期记忆"
-          value="第 5 阶段接入"
-          detail="当前不显示虚构占用"
-          percent={0}
+          label="实时记忆"
+          value={
+            memory.data
+              ? `${memory.data.active_delta_char_count} / ${memory.data.delta_char_limit}`
+              : "读取中…"
+          }
+          detail={
+            memory.data?.deferred_count
+              ? `${memory.data.deferred_count} 条等待第 6 阶段整理`
+              : "显式要求从下一回合生效"
+          }
+          percent={
+            memory.data
+              ? (memory.data.active_delta_char_count /
+                  memory.data.delta_char_limit) *
+                100
+              : 0
+          }
+          tone={
+            (memory.data?.active_delta_char_count ?? 0) > 1_800
+              ? "amber"
+              : "green"
+          }
         />
 
         <section className="status-card skill-card">

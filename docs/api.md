@@ -37,7 +37,14 @@
 
 反馈请求的 `rating` 为 `satisfied` 或 `unsatisfied`，`comment` 可选且最多 2,000 字符。响应明确拆分为 `quality_feedback` 和 `survival_reward`：前者每次都追加历史事件，后者只在首次满意时返回两条奖励交易。评价可以修改，但奖励不撤销，也不会因重复满意再次发放。
 
-生存状态以 Units 返回余额与最近一个真实 execution trace 的本轮用量，`100 Units = 1 Token`。交易金额扣款为负、奖励为正。执行轨迹包含 Provider 原始 Usage、归一化 Usage、模型名、真实工具名、延迟和结构化结果；当前阶段的 memory/skill revision ID 数组为空，后续阶段只填实际注入版本。
+生存状态以 Units 返回余额与最近一个真实 execution trace 的本轮用量，`100 Units = 1 Token`。交易金额扣款为负、奖励为正。执行轨迹包含 Provider 原始 Usage、归一化 Usage、模型名、真实工具名、延迟和结构化结果；`memory_revision_ids` 从第 5 阶段开始只填本轮实际注入的实时记忆 revision，Skill 数组仍等待第 7 阶段。
+
+## 实时记忆
+
+- `GET /api/memory?status={status}&query={text}`
+- `GET /api/memory/status`
+
+列表返回用户原始显式表达、来源回合、revision ID、优先级、状态与字符数。状态接口分别返回有效/等待整理字符数、2,000 字符上限和记录数；正式长期记忆占用在第 6 阶段前固定为零，不提供虚构版本。
 
 ## WebSocket
 
@@ -53,7 +60,7 @@
 }
 ```
 
-对话发送 `turn.started`、`assistant.delta`、`usage.updated`、`balance.updated`、`assistant.completed`、`assistant.cancelled` 和 `error`。第 3 阶段另发送 `tool.started`、`tool.completed`、`tool.failed`；事件包含持久化执行 ID、工具调用 ID、序号、工具名、参数，以及完成后的结构化结果或错误。`usage.updated` 同时携带归一化字段与 Provider 原始 Usage，`balance.updated` 在扣款事务提交后携带账户余额和本轮 Units 变化。反馈通过 REST 返回同样的结构化分离结果。前端不得解析自然语言推断运行状态。
+对话发送 `turn.started`、`assistant.delta`、`usage.updated`、`balance.updated`、`assistant.completed`、`assistant.cancelled` 和 `error`。第 3 阶段另发送 `tool.started`、`tool.completed`、`tool.failed`；第 5 阶段在当前用户消息形成显式增量时发送 `memory.delta_created`，只携带结构化 ID、revision、来源、优先级、状态和字符数，不回显完整记忆。`usage.updated` 同时携带归一化字段与 Provider 原始 Usage，`balance.updated` 在扣款事务提交后携带账户余额和本轮 Units 变化。反馈通过 REST 返回同样的结构化分离结果。前端不得解析自然语言推断运行状态。
 
 ## Provider
 

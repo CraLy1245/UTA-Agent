@@ -2,6 +2,8 @@ import type {
   ConversationDetail,
   ConversationSummary,
   FeedbackResult,
+  MemoryDelta,
+  MemoryStatus,
   ModelSetting,
   SurvivalStatus,
   TokenTransaction,
@@ -61,6 +63,14 @@ export const chatApi = {
     ),
   getTokenTransactions: (limit = 20) =>
     request<TokenTransaction[]>(`/survival/transactions?limit=${limit}`),
+  getMemoryStatus: () => request<MemoryStatus>("/memory/status"),
+  getMemoryDelta: (status?: string, query?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (query) params.set("query", query);
+    const suffix = params.size ? `?${params.toString()}` : "";
+    return request<MemoryDelta[]>(`/memory${suffix}`);
+  },
   submitFeedback: (
     turnId: string,
     rating: "satisfied" | "unsatisfied",

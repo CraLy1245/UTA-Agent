@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -115,6 +115,32 @@ function mockApi() {
           },
         });
       if (url.includes("/survival/transactions")) return Response.json([]);
+      if (url.endsWith("/memory/status"))
+        return Response.json({
+          active_delta_char_count: 15,
+          delta_char_limit: 2000,
+          deferred_delta_char_count: 0,
+          pending_count: 1,
+          deferred_count: 0,
+          formal_memory_char_count: 0,
+          formal_memory_char_limit: 18000,
+          current_memory_version: null,
+        });
+      if (url.endsWith("/memory") || url.includes("/memory?"))
+        return Response.json([
+          {
+            id: "memory-1",
+            revision_id: "revision-1",
+            source_turn_id: "source-turn-1",
+            raw_content: "以后不要使用 CLI",
+            delta_type: "explicit_instruction",
+            priority: 98,
+            status: "pending",
+            char_count: 15,
+            consumed_by_job_id: null,
+            created_at: now,
+          },
+        ]);
       if (url.endsWith("/turns/old-turn/feedback"))
         return Response.json({
           quality_feedback: {
@@ -154,7 +180,7 @@ function renderApp(path = "/chat/mock-1") {
   );
 }
 
-describe("phase 4 application", () => {
+describe("phase 5 application", () => {
   beforeEach(() => {
     useUiStore.setState({
       conversationsCollapsed: false,
@@ -283,6 +309,12 @@ describe("phase 4 application", () => {
     renderApp();
     await user.click(await screen.findByRole("link", { name: "记忆" }));
     expect(screen.getByRole("heading", { name: "记忆" })).toBeInTheDocument();
+    expect(await screen.findByText("以后不要使用 CLI")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "记忆占用" })).getByText(
+        "15 / 2000",
+      ),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "技能" }));
     expect(screen.getByRole("heading", { name: "技能" })).toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "活动" }));

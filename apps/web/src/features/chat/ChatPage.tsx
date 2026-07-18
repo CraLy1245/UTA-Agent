@@ -252,6 +252,8 @@ export function ChatPage() {
       void queryClient.invalidateQueries({ queryKey: ["conversations"] });
       void queryClient.invalidateQueries({ queryKey: ["survival-status"] });
       void queryClient.invalidateQueries({ queryKey: ["token-transactions"] });
+      void queryClient.invalidateQueries({ queryKey: ["memory-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["memory-delta"] });
     },
     [queryClient],
   );
@@ -286,6 +288,10 @@ export function ChatPage() {
           void queryClient.invalidateQueries({
             queryKey: ["token-transactions"],
           });
+        }
+        if (event.event === "memory.delta_created") {
+          void queryClient.invalidateQueries({ queryKey: ["memory-status"] });
+          void queryClient.invalidateQueries({ queryKey: ["memory-delta"] });
         }
         if (
           event.event === "assistant.completed" ||

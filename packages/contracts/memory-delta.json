@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://survival-agent.local/contracts/memory-delta.json",
+  "title": "Memory delta created event data",
+  "type": "object",
+  "required": ["memory_delta"],
+  "properties": {
+    "memory_delta": {
+      "type": "object",
+      "required": [
+        "id",
+        "revision_id",
+        "source_turn_id",
+        "delta_type",
+        "priority",
+        "status",
+        "char_count"
+      ],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "revision_id": { "type": "string", "format": "uuid" },
+        "source_turn_id": { "type": "string", "format": "uuid" },
+        "delta_type": { "const": "explicit_instruction" },
+        "priority": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "status": {
+          "enum": ["pending", "deferred_capacity", "duplicate_merged"]
+        },
+        "char_count": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

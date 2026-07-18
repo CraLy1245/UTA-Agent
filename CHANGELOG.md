@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0 - 2026-07-18
+
+### Added
+
+- 添加显式长期指令的确定性检测、真实 `memory_delta` SQLite/Alembic 持久化和 `memory.delta_created` 事件。
+- 添加每条实时增量的不可变 revision ID，并把本轮实际注入的 revision IDs 写入 execution trace。
+- 添加实时记忆状态与列表 API，以及记忆管理页的占用、搜索、状态、来源回合和 revision 展示。
+- 右侧状态栏显示实时增量占用与等待整理数量。
+
+### Changed
+
+- 当前回合捕获的新指令不自注入；从因果顺序中的下一回合开始，每轮重新读取有效实时增量。
+- 2,000 字符容量使用 Unicode Code Point 计算；重复指令合并占用，优先保留明确纠正，溢出记录保留为 `deferred_capacity`。
+- 收紧问句检测，引用既有“以后不要”要求的元问题不会被误写成新记忆。
+
+### Security
+
+- 记忆上下文只保存用户原始显式表达和结构化来源，不保存 API Key、Authorization Header 或完整模型上下文。
+- 容量重排与回合创建使用 SQLite 写事务，避免并发捕获突破实时额度。
+
 ## 0.5.0 - 2026-07-18
 
 ### Added

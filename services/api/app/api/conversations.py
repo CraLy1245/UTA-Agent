@@ -17,6 +17,7 @@ from services.api.app.schemas.conversations import (
     TurnCreate,
     TurnRead,
 )
+from services.memory.realtime_delta import capture_explicit_instruction
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 turn_router = APIRouter(prefix="/turns", tags=["turns"])
@@ -92,14 +93,17 @@ def delete_conversation(conversation_id: str, db: SessionDep) -> Response:
 def create_turn(
     conversation_id: str, payload: TurnCreate, db: SessionDep
 ) -> Turn:
+    db.connection().exec_driver_sql("BEGIN IMMEDIATE")
     conversation = _get_conversation(db, conversation_id)
     content = payload.content.strip()
+    created_at = datetime.now(UTC)
     message_id = str(uuid4())
     turn = Turn(
         id=str(uuid4()),
         conversation_id=conversation_id,
         user_message_id=message_id,
         status="pending",
+        created_at=created_at,
     )
     message = Message(
         id=message_id,
@@ -108,10 +112,15 @@ def create_turn(
         role="user",
         content=content,
         sequence=_next_sequence(db, conversation_id),
+        created_at=created_at,
     )
     conversation.title = content[:60] if conversation.title == "新对话" else conversation.title
     conversation.updated_at = datetime.now(UTC)
     db.add_all([turn, message])
+    db.flush()
+    capture_explicit_instruction(
+        db, source_turn_id=turn.id, user_text=content
+    )
     db.commit()
     db.refresh(turn)
     return turn
@@ -150,6 +159,7 @@ def regenerate_turn(turn_id: str, db: SessionDep) -> Turn:
         user_message_id=source.user_message_id,
         source_turn_id=source.id,
         status="pending",
+        created_at=datetime.now(UTC),
     )
     db.add(regenerated)
     db.commit()

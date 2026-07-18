@@ -62,6 +62,7 @@ def debit_completed_turn(
     raw_usages: list[dict[str, Any]],
     tool_names: list[str],
     tool_outcomes: list[dict[str, str]],
+    memory_revision_ids: list[str],
     latency_ms: int,
 ) -> tuple[TurnExecutionTrace, list[TokenTransaction]]:
     existing_trace = db.scalar(
@@ -110,7 +111,7 @@ def debit_completed_turn(
         id=str(uuid4()),
         turn_id=turn.id,
         model_id=model_id,
-        memory_revision_ids_json="[]",
+        memory_revision_ids_json=json.dumps(memory_revision_ids, ensure_ascii=False),
         skill_revision_ids_json="[]",
         tool_names_json=json.dumps(tool_names, ensure_ascii=False),
         provider_raw_usage_json=json.dumps(raw_usages, ensure_ascii=False),
