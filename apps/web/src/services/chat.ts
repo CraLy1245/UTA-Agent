@@ -36,6 +36,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function download(path: string): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(`${API_BASE_URL}${path}`);
+  if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? "survival-agent-export.json";
+  return { blob: await response.blob(), filename };
+}
+
 export const chatApi = {
   listConversations: () => request<ConversationSummary[]>("/conversations"),
   getConversation: (id: string) =>
@@ -63,6 +71,7 @@ export const chatApi = {
     request<Turn>(`/turns/${turnId}/regenerate`, { method: "POST" }),
   getModelSetting: () => request<ModelSetting>("/model-settings/main"),
   getToolStatus: () => request<ToolStatus>("/tools/status"),
+  exportData: () => download("/data/export"),
   getSurvivalStatus: (conversationId?: string) =>
     request<SurvivalStatus>(
       `/survival/status${conversationId ? `?conversation_id=${encodeURIComponent(conversationId)}` : ""}`,

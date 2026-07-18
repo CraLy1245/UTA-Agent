@@ -122,7 +122,7 @@ export function AgentSidebar() {
       <header>
         <div>
           <span>Agent 状态</span>
-          <small>第 7 阶段 Skill 演化</small>
+          <small>第 8 阶段 稳定性验证</small>
         </div>
         <i aria-label="系统在线" />
       </header>

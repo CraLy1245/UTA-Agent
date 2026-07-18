@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.9.0 - 2026-07-19
+
+### Added
+
+- 添加一致 WAL 读快照的 `GET /api/data/export` 与设置页 JSON 下载，覆盖会话、账本、记忆、Job、Skill 和完整版本历史。
+- 添加四类轮转日志、统一上下文字段、全局 SQLite busy 安全响应，以及错误/日志/导出递归脱敏。
+- 添加独立进程 22 回合 E2E：20 回合触发、21 回合前台并行、22 回合读取新记忆、108% 幂等奖励、导出及重启恢复。
+- 添加双 Worker 并发领取、延迟 Job 不阻塞、重启回收、SQLite 完整性和脱敏回归测试。
+
+### Changed
+
+- Cognitive Worker 的 conflict 保持可见且按 10/30 秒自动重新领取；查询直接跳过尚未到期的重试任务，不阻塞其他 ready Job。
+- 新进程启动时立即回收上一进程的 `running/validating/committing` 领取，已提交事务与历史版本保持不变。
+
+### Security
+
+- Provider/Worker 错误持久化、WebSocket 错误、日志与导出统一清理当前环境密钥、`sk-` 形态、Authorization Bearer 及常见密钥字段。
+- 导出明确排除 `model_settings.api_key_env`，真实浏览器下载经三类凭据模式扫描均为 0 命中。
+
 ## 0.8.0 - 2026-07-18
 
 ### Added

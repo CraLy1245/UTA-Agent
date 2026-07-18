@@ -79,6 +79,15 @@ Cognitive Worker ─ strict JSON proposal ─ deterministic commit validator
 - 晋升后的前 5 次是观察期；严重客观失败或连续两次不满意自动恢复上一稳定 Revision。锁定、暂停、手动晋升/拒绝/回滚始终优先。
 - survival reward 仍只操作 Token 账本；quality feedback 只更新实际 Skill Revision 的质量统计，两者由同一回合关联但不互相改变计算。
 
+## 第 8 阶段稳定性边界
+
+- SQLite WAL 继续是唯一业务事实源。前台短写事务、Worker 原子领取和后台原子提交彼此解耦；网络模型调用期间不持数据库写锁。
+- Worker 以 `BEGIN IMMEDIATE` 领取，两个进程不能获得同一 Job。尚未到 `next_attempt_at` 的冲突/失败任务在 SQL 查询中被跳过，不阻塞其他 ready Job。
+- memory/Skill expected revision 不一致时不覆盖用户修改。Job 保持 `conflict` 可观察状态并按 10/30 秒重新读取最新 payload；第三次仍失败才停止自动重试。
+- 应用新进程没有上一进程的合法内存领取，因此启动时将遗留 `running/validating/committing` 状态恢复为 pending。已提交 WAL 事务、Revision、Snapshot 和账本不做回滚或重写。
+- 数据导出在一个只读事务中读取全部白名单表，形成同一 WAL 快照。导出与日志共享递归脱敏器，且模型配置导出不包含密钥环境变量字段。
+- 四类轮转日志只记录 UTC 时间、级别、conversation/turn/job ID、模块和脱敏消息；API 对数据库 busy 返回可重试 503，不向前端暴露 SQL 或连接细节。
+
 ## 长期可替换性
 
 - Provider 通过 `ProviderConfig` 和流式事件接口接入，避免绑定单一模型供应商。

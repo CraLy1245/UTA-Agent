@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
+import logging
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from services.agent.model_provider import OpenAICompatibleProvider, ProviderConfig
 from services.api.app.core.config import get_settings
+from services.api.app.core.security import redact_text
 from services.api.app.db.models import (
     CognitiveJob,
     CognitiveState,
@@ -256,16 +257,13 @@ def claim_next_job(db: Session) -> CognitiveJob | None:
     now = datetime.now(UTC)
     job = db.scalar(
         select(CognitiveJob)
-        .where(CognitiveJob.status == "pending")
+        .where(
+            CognitiveJob.status.in_(("pending", "conflict")),
+            or_(CognitiveJob.next_attempt_at.is_(None), CognitiveJob.next_attempt_at <= now),
+        )
         .order_by(CognitiveJob.created_at, CognitiveJob.id)
     )
     if job is None:
-        db.rollback()
-        return None
-    next_at = job.next_attempt_at
-    if next_at is not None and next_at.tzinfo is None:
-        next_at = next_at.replace(tzinfo=UTC)
-    if next_at is not None and next_at > now:
         db.rollback()
         return None
     job.status = "running"
@@ -743,11 +741,18 @@ def mark_failure(job_id: str, error: Exception) -> None:
         if job is None:
             db.rollback()
             return
-        safe_error = re.sub(r"sk-[A-Za-z0-9_-]{8,}", "[REDACTED]", str(error))
+        safe_error = redact_text(str(error))
         job.error_message = safe_error[:1000]
         if isinstance(error, MemoryConflictError):
             job.status = "conflict"
-            job.completed_at = datetime.now(UTC)
+            if job.attempt_count <= len(RETRY_DELAYS):
+                job.next_attempt_at = datetime.now(UTC) + timedelta(
+                    seconds=RETRY_DELAYS[job.attempt_count - 1]
+                )
+                job.completed_at = None
+            else:
+                job.status = "failed"
+                job.completed_at = datetime.now(UTC)
             db.commit()
             return
         if job.attempt_count <= len(RETRY_DELAYS):
@@ -791,6 +796,11 @@ class CognitiveWorker:
                     await skill_event_hub.publish(skill_event)
         except Exception as exc:
             mark_failure(job.id, exc)
+            logging.getLogger("survival.worker").error(
+                "cognitive job failed: %s",
+                redact_text(str(exc))[:1000],
+                extra={"job_id": job.id},
+            )
             with SessionLocal() as db:
                 failed = db.get(CognitiveJob, job.id)
                 if failed is not None:

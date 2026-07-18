@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, KeyRound, Save, Settings } from "lucide-react";
+import { CheckCircle2, Download, KeyRound, Save, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { chatApi } from "../../services/chat";
@@ -35,6 +35,7 @@ export function SettingsPage() {
   });
   const [form, setForm] = useState<ModelForm>(emptyForm);
   const [saved, setSaved] = useState(false);
+  const [exported, setExported] = useState(false);
   useEffect(() => {
     if (!setting.data) return;
     setForm({
@@ -54,6 +55,19 @@ export function SettingsPage() {
         queryKey: ["model-setting", "main"],
       });
       window.setTimeout(() => setSaved(false), 1800);
+    },
+  });
+  const exportData = useMutation({
+    mutationFn: chatApi.exportData,
+    onSuccess: ({ blob, filename }) => {
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(href);
+      setExported(true);
+      window.setTimeout(() => setExported(false), 1800);
     },
   });
 
@@ -189,6 +203,24 @@ export function SettingsPage() {
             可用工具：
             {toolStatus.data?.available_tools.join("、") || "无"}
           </p>
+        </section>
+        <section>
+          <h2>数据导出</h2>
+          <p className="settings-copy">
+            导出当前 SQLite 中的会话、账本、记忆、后台任务与 Skill
+            版本。导出在同一 WAL 读快照内生成，并自动清理密钥和 Authorization
+            信息。
+          </p>
+          <button
+            className="secondary-button export-button"
+            type="button"
+            disabled={exportData.isPending}
+            onClick={() => exportData.mutate()}
+          >
+            <Download />
+            {exportData.isPending ? "导出中…" : exported ? "导出完成" : "导出 JSON"}
+          </button>
+          {exportData.isError ? <p className="form-error">导出失败，请稍后重试。</p> : null}
         </section>
         <section className="danger-zone">
           <h2>危险操作</h2>

@@ -94,3 +94,11 @@
 当前 Provider 调用 `{base_url}/chat/completions`，使用 Chat Completions SSE 格式；Base URL 需要包含服务要求的版本路径（常见为 `/v1`）。优先发送 `max_tokens`；若兼容服务明确报告不支持该字段，则切换 `max_completion_tokens`。Provider 兼容 SSE delta、普通 Chat Completion 回包和分段文本。响应直到完整结束才作为 assistant 消息提交。
 
 工具请求使用 Chat Completions 的 `tools` JSON Schema。运行时按 `index` 合并流式 `delta.tool_calls`，保存 assistant 工具调用，执行本地受限工具，再以 `role=tool` 和原始 `tool_call_id` 回传结果。只有模型结束工具循环并返回最终文本后，才保存 assistant 消息。
+
+## 数据导出与并发错误
+
+- `GET /api/data/export`
+
+返回 `application/json` 附件，顶层包含格式版本、UTC 导出时间、数据库类型和 19 个业务表的同一 WAL 读快照。字符串与嵌套 JSON 会清理当前进程密钥、Bearer Header、`sk-` 形态和常见 secret/token/key 字段；`model_settings.api_key_env` 不导出。
+
+SQLite 写锁超过 Busy Timeout 时 API 返回 `503`、安全的 `detail` 与 `Retry-After: 1`；不返回 SQL、路径、Header 或原始异常。记忆/Skill expected revision 冲突仍返回 `409`，由用户刷新后重试。

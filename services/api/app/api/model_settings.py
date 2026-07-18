@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from services.agent.model_provider import OpenAICompatibleProvider, ProviderConfig, ProviderError
 from services.api.app.core.config import get_settings
+from services.api.app.core.security import redact_text
 from services.api.app.db.models import ModelSetting
 from services.api.app.db.session import get_db
 from services.api.app.schemas.model_settings import (
@@ -61,7 +62,7 @@ async def list_provider_models(role: str, db: SessionDep) -> ModelListRead:
     try:
         return ModelListRead(models=await provider.list_models())
     except ProviderError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=redact_text(str(exc))) from exc
 
 
 @router.put("/{role}", response_model=ModelSettingRead)

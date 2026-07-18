@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -18,6 +19,7 @@ from services.agent.model_provider import (
 from services.agent.tool_runtime import ToolResult, WorkspaceToolRuntime
 from services.agent.usage_normalizer import UsageNormalizer
 from services.api.app.core.config import get_settings
+from services.api.app.core.security import redact_text
 from services.api.app.db.models import MemoryDelta, Message, ModelSetting, ToolExecution, Turn
 from services.api.app.db.session import SessionLocal
 from services.memory.cognitive import record_completed_turn
@@ -576,11 +578,17 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                 db.commit()
         raise
     except Exception as exc:
+        safe_error = redact_text(str(exc))[:1000]
+        logging.getLogger("survival.agent").error(
+            "turn failed: %s",
+            safe_error,
+            extra={"turn_id": turn_id},
+        )
         with SessionLocal() as db:
             turn = db.get(Turn, turn_id)
             if turn is not None:
                 turn.status = "failed"
-                turn.error_message = str(exc)[:1000]
+                turn.error_message = safe_error
                 turn.completed_at = datetime.now(UTC)
                 db.commit()
                 await websocket.send_json(

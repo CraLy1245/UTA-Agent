@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     tool_timeout_seconds: int = 2048
     turn_timeout_seconds: int = 1800
     max_model_loops: int = 9999
+    log_directory: str = "./logs"
 
     model_config = SettingsConfigDict(
         env_file=".env",

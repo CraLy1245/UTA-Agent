@@ -76,6 +76,16 @@
 
 稳定与候选指针是核心独立字段，不藏入 JSON。来源列表和评估证据使用 JSON，但必须通过服务层验证真实 ID、锁定、基础 Revision、阈值与幂等性。归档和拒绝只改变生命周期状态，不删除历史。
 
+## 第 8 阶段一致性与恢复
+
+第 8 阶段不新增业务表或运行时 `create_all()`；现有 `20260718_0007` 仍为 Alembic head。稳定性规则落在事务、状态机和测试边界：
+
+- Worker `BEGIN IMMEDIATE` 领取后立即提交领取状态；同一 Job 不会被两个 Session 同时领取。
+- `pending/conflict + next_attempt_at` 是可恢复的 Durable Queue。未来重试不会阻塞后续 ready Job。
+- 新进程启动将旧进程未完成的 running/validating/committing 领取恢复为 pending；SQLite 只恢复未完成状态，不改动已提交事务。
+- 导出使用只读事务固定 WAL 快照并显式白名单 19 张业务表；密钥字段排除后再递归脱敏。
+- `PRAGMA integrity_check`、WAL、Foreign Keys、Busy Timeout、空库 Alembic 和引擎关闭重开均进入自动化验收。
+
 ## 数据路径
 
 开发默认数据库：`data/survival_agent.db`。路径可通过 `SURVIVAL_AGENT_DATABASE_URL` 覆盖。数据库文件、WAL 和共享内存文件均不提交 Git。

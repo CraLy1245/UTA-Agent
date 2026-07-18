@@ -193,6 +193,14 @@ function mockApi() {
         });
       if (url.endsWith("/model-settings/main"))
         return Response.json(modelSetting);
+      if (url.endsWith("/data/export"))
+        return new Response('{"format":"survival-agent-export"}', {
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Disposition":
+              'attachment; filename="survival-agent-test.json"',
+          },
+        });
       if (url.endsWith("/tools/status"))
         return Response.json({
           enabled: true,
@@ -235,6 +243,7 @@ describe("phase 6 application", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("已持久化的回答")).toBeInTheDocument();
     expect(screen.getByText("Agent 状态")).toBeInTheDocument();
+    expect(screen.getByText("第 8 阶段 稳定性验证")).toBeInTheDocument();
     expect(await screen.findByText("1,000,000,000.00")).toBeInTheDocument();
     expect(screen.getByText("100,000,000.00")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "折叠会话栏" }));
@@ -337,6 +346,28 @@ describe("phase 6 application", () => {
         expect.stringContaining("/turns/turn-1/cancel"),
         expect.objectContaining({ method: "POST" }),
       ),
+    );
+  });
+
+  it("exports a redacted SQLite snapshot from settings", async () => {
+    const user = userEvent.setup();
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    const createObjectURL = vi.fn(() => "blob:phase8-export");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+    renderApp("/settings");
+
+    await user.click(
+      await screen.findByRole("button", { name: "导出 JSON" }),
+    );
+
+    await waitFor(() => expect(click).toHaveBeenCalledOnce());
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:phase8-export");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/data/export"),
     );
   });
 
