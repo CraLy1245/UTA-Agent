@@ -52,6 +52,7 @@ export type Turn = {
   error_message: string | null;
   input_tokens: number | null;
   output_tokens: number | null;
+  completed_number?: number | null;
 };
 
 export type ModelSetting = {
@@ -137,6 +138,56 @@ export type MemoryStatus = {
   formal_memory_char_count: number;
   formal_memory_char_limit: number;
   current_memory_version: number | null;
+};
+
+export type MemoryItem = {
+  id: string;
+  category: string;
+  title: string;
+  content: string;
+  tags: string[];
+  priority: number;
+  status: "active" | "archived" | "superseded";
+  locked: boolean;
+  current_revision_id: string;
+  char_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MemoryRevision = {
+  id: string;
+  memory_item_id: string;
+  previous_revision_id: string | null;
+  operation: string;
+  title: string;
+  content: string;
+  category: string;
+  priority: number;
+  status: string;
+  locked: boolean;
+  source_turn_ids: string[];
+  cognitive_job_id: string | null;
+  created_by: string;
+  reason: string | null;
+  created_at: string;
+};
+
+export type CognitiveJob = {
+  id: string;
+  job_type: string;
+  start_turn_number: number;
+  end_turn_number: number;
+  status: "pending" | "running" | "validating" | "committing" | "completed" | "failed" | "conflict";
+  memory_version_before: number;
+  memory_version_after: number | null;
+  attempt_count: number;
+  error_message: string | null;
+  result_json: string | null;
+  next_attempt_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
 };
 
 export type StreamEvent = {

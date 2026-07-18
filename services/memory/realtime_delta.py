@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from services.api.app.db.models import MemoryDelta
+from services.memory.formal import retrieve_formal_memory
 
 REALTIME_DELTA_CHAR_LIMIT = 2_000
 ACTIVE_STATUSES = ("pending", "deferred_capacity")
@@ -96,9 +97,7 @@ def capture_explicit_instruction(
 
 def _rebalance_active_delta(db: Session) -> None:
     candidates = list(
-        db.scalars(
-            select(MemoryDelta).where(MemoryDelta.status.in_(ACTIVE_STATUSES))
-        )
+        db.scalars(select(MemoryDelta).where(MemoryDelta.status.in_(ACTIVE_STATUSES)))
     )
     candidates.sort(
         key=lambda delta: (
@@ -121,7 +120,9 @@ def build_memory_context(
     *,
     excluded_source_turn_ids: set[str],
     available_before: datetime,
+    query_text: str = "",
 ) -> MemoryContext:
+    formal = retrieve_formal_memory(db, query=query_text)
     query = select(MemoryDelta).where(
         MemoryDelta.status.in_(ACTIVE_STATUSES),
         MemoryDelta.created_at < available_before,
@@ -143,15 +144,18 @@ def build_memory_context(
             deltas.append(delta)
             used += delta.char_count
     deltas.sort(key=lambda delta: (delta.created_at, delta.id))
-    if not deltas:
-        return MemoryContext(content=None, revision_ids=[], char_count=0)
-    content = (
-        "Current real-time memory instructions. These were explicitly provided by the user in "
-        "earlier turns and must be followed when relevant:\n"
-        + "\n".join(f"- {delta.raw_content}" for delta in deltas)
+    delta_content = (
+        (
+            "Current real-time memory instructions. These were explicitly provided by the user in "
+            "earlier turns and must be followed when relevant:\n"
+            + "\n".join(f"- {delta.raw_content}" for delta in deltas)
+        )
+        if deltas
+        else None
     )
+    parts = [part for part in (formal.content, delta_content) if part]
     return MemoryContext(
-        content=content,
-        revision_ids=[delta.revision_id for delta in deltas],
-        char_count=sum(delta.char_count for delta in deltas),
+        content="\n\n".join(parts) if parts else None,
+        revision_ids=formal.revision_ids + [delta.revision_id for delta in deltas],
+        char_count=formal.char_count + sum(delta.char_count for delta in deltas),
     )

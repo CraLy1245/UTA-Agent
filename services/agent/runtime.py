@@ -20,6 +20,7 @@ from services.agent.usage_normalizer import UsageNormalizer
 from services.api.app.core.config import get_settings
 from services.api.app.db.models import MemoryDelta, Message, ModelSetting, ToolExecution, Turn
 from services.api.app.db.session import SessionLocal
+from services.memory.cognitive import record_completed_turn
 from services.memory.realtime_delta import MemoryContext, build_memory_context
 from services.survival.ledger import balance_context, balances, debit_completed_turn
 
@@ -122,9 +123,7 @@ def _tool_public_data(execution: ToolExecution) -> dict[str, object]:
         "result": execution.result,
         "error_message": execution.error_message,
         "started_at": execution.started_at.isoformat() if execution.started_at else None,
-        "completed_at": (
-            execution.completed_at.isoformat() if execution.completed_at else None
-        ),
+        "completed_at": (execution.completed_at.isoformat() if execution.completed_at else None),
     }
 
 
@@ -248,9 +247,7 @@ async def _run_model_loop(
                 iteration_content.append(provider_event.delta)
                 visible_content.append(provider_event.delta)
                 await websocket.send_json(
-                    websocket_event(
-                        "assistant.delta", turn, {"content": provider_event.delta}
-                    )
+                    websocket_event("assistant.delta", turn, {"content": provider_event.delta})
                 )
             for delta in provider_event.tool_calls:
                 call = pending_calls.setdefault(delta.index, PendingToolCall(index=delta.index))
@@ -365,6 +362,7 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                 db,
                 excluded_source_turn_ids=excluded_source_turn_ids,
                 available_before=turn.created_at,
+                query_text=user_message.content,
             )
             captured_delta = db.scalar(
                 select(MemoryDelta)
@@ -434,14 +432,17 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
             current_turn = db.get(Turn, turn_id)
             if current_turn is None:
                 raise RuntimeError("Turn disappeared before finalization")
-            sequence = int(
-                db.scalar(
-                    select(func.max(Message.sequence)).where(
-                        Message.conversation_id == current_turn.conversation_id
+            sequence = (
+                int(
+                    db.scalar(
+                        select(func.max(Message.sequence)).where(
+                            Message.conversation_id == current_turn.conversation_id
+                        )
                     )
+                    or 0
                 )
-                or 0
-            ) + 1
+                + 1
+            )
             assistant_message = Message(
                 id=str(uuid4()),
                 conversation_id=current_turn.conversation_id,
@@ -471,9 +472,7 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
             ]
             started_at = current_turn.started_at or current_turn.created_at
             completed_for_latency = (
-                completed_at.replace(tzinfo=None)
-                if started_at.tzinfo is None
-                else completed_at
+                completed_at.replace(tzinfo=None) if started_at.tzinfo is None else completed_at
             )
             latency_ms = int((completed_for_latency - started_at).total_seconds() * 1000)
             _, debit_transactions = debit_completed_turn(
@@ -487,6 +486,7 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                 memory_revision_ids=memory_context.revision_ids,
                 latency_ms=latency_ms,
             )
+            cognitive_job = record_completed_turn(db, current_turn)
             db.flush()
             account_snapshot = balances(db)
             db.commit()
@@ -533,6 +533,18 @@ async def run_turn(websocket: WebSocket, turn_id: str) -> None:
                     },
                 )
             )
+            if cognitive_job is not None and cognitive_job.status == "pending":
+                await websocket.send_json(
+                    websocket_event(
+                        "cognitive.job_queued",
+                        current_turn,
+                        {
+                            "job_id": cognitive_job.id,
+                            "start_turn_number": cognitive_job.start_turn_number,
+                            "end_turn_number": cognitive_job.end_turn_number,
+                        },
+                    )
+                )
     except WebSocketDisconnect:
         with SessionLocal() as db:
             turn = db.get(Turn, turn_id)

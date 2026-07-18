@@ -65,6 +65,7 @@ class Turn(Base):
     error_message: Mapped[str | None] = mapped_column(Text(), nullable=True)
     input_tokens: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    completed_number: Mapped[int | None] = mapped_column(Integer(), nullable=True, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -111,9 +112,7 @@ class ModelSetting(Base):
     timeout_seconds: Mapped[int] = mapped_column(Integer(), nullable=False, default=120)
     max_output_tokens: Mapped[int] = mapped_column(Integer(), nullable=False, default=8192)
     temperature: Mapped[float | None] = mapped_column(Float(), nullable=True)
-    api_key_env: Mapped[str] = mapped_column(
-        String(100), nullable=False, default="OPENAI_API_KEY"
-    )
+    api_key_env: Mapped[str] = mapped_column(String(100), nullable=False, default="OPENAI_API_KEY")
     enabled: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -130,9 +129,7 @@ class ToolExecution(Base):
     conversation_id: Mapped[str] = mapped_column(
         ForeignKey("conversations.id", ondelete="CASCADE"), index=True
     )
-    turn_id: Mapped[str] = mapped_column(
-        ForeignKey("turns.id", ondelete="CASCADE"), index=True
-    )
+    turn_id: Mapped[str] = mapped_column(ForeignKey("turns.id", ondelete="CASCADE"), index=True)
     provider_call_id: Mapped[str] = mapped_column(String(200), nullable=False)
     call_sequence: Mapped[int] = mapped_column(Integer(), nullable=False)
     tool_name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -209,9 +206,7 @@ class TokenTransaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     turn: Mapped[Turn | None] = relationship(back_populates="token_transactions")
-    feedback_event: Mapped[FeedbackEvent | None] = relationship(
-        back_populates="token_transactions"
-    )
+    feedback_event: Mapped[FeedbackEvent | None] = relationship(back_populates="token_transactions")
 
     @property
     def metadata_value(self) -> dict[str, object]:
@@ -294,4 +289,106 @@ class MemoryDelta(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     char_count: Mapped[int] = mapped_column(Integer(), nullable=False)
     consumed_by_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CognitiveState(Base):
+    __tablename__ = "cognitive_state"
+
+    id: Mapped[str] = mapped_column(String(20), primary_key=True, default="global")
+    completed_turn_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    last_consolidated_turn: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    memory_version: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class MemoryItem(Base):
+    __tablename__ = "memory_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    content: Mapped[str] = mapped_column(Text(), nullable=False)
+    tags_json: Mapped[str] = mapped_column(Text(), nullable=False, default="[]")
+    priority: Mapped[int] = mapped_column(Integer(), nullable=False, default=50)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    locked: Mapped[bool] = mapped_column(Boolean(), nullable=False, default=False)
+    current_revision_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    char_count: Mapped[int] = mapped_column(Integer(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    @property
+    def tags(self) -> list[str]:
+        value = json.loads(self.tags_json)
+        return value if isinstance(value, list) else []
+
+
+class MemoryRevision(Base):
+    __tablename__ = "memory_revisions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    memory_item_id: Mapped[str] = mapped_column(
+        ForeignKey("memory_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    previous_revision_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    operation: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    content: Mapped[str] = mapped_column(Text(), nullable=False)
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
+    tags_json: Mapped[str] = mapped_column(Text(), nullable=False, default="[]")
+    priority: Mapped[int] = mapped_column(Integer(), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    locked: Mapped[bool] = mapped_column(Boolean(), nullable=False)
+    source_turn_ids_json: Mapped[str] = mapped_column(Text(), nullable=False, default="[]")
+    cognitive_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    created_by: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def source_turn_ids(self) -> list[str]:
+        value = json.loads(self.source_turn_ids_json)
+        return value if isinstance(value, list) else []
+
+
+class MemorySnapshot(Base):
+    __tablename__ = "memory_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer(), nullable=False, unique=True)
+    cognitive_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)
+    revision_ids_json: Mapped[str] = mapped_column(Text(), nullable=False)
+    formal_char_count: Mapped[int] = mapped_column(Integer(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CognitiveJob(Base):
+    __tablename__ = "cognitive_jobs"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_type", "start_turn_number", "end_turn_number", name="uq_cognitive_job_range"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    job_type: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="memory_consolidation"
+    )
+    start_turn_number: Mapped[int] = mapped_column(Integer(), nullable=False)
+    end_turn_number: Mapped[int] = mapped_column(Integer(), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    memory_version_before: Mapped[int] = mapped_column(Integer(), nullable=False)
+    memory_version_after: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    result_json: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

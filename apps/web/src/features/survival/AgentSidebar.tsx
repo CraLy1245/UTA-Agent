@@ -75,6 +75,21 @@ export function AgentSidebar() {
     queryKey: ["memory-status"],
     queryFn: chatApi.getMemoryStatus,
   });
+  const cognitiveJobs = useQuery({
+    queryKey: ["cognitive-jobs"],
+    queryFn: chatApi.getCognitiveJobs,
+    refetchInterval: 3_000,
+  });
+  const latestCognitiveJob = cognitiveJobs.data?.[0];
+  const cognitiveLabel = latestCognitiveJob
+    ? latestCognitiveJob.status === "completed"
+      ? `已整理 ${latestCognitiveJob.start_turn_number}—${latestCognitiveJob.end_turn_number}`
+      : latestCognitiveJob.status === "failed"
+        ? "失败待重试"
+        : latestCognitiveJob.status === "conflict"
+          ? "版本冲突"
+          : "处理中"
+    : "等待 20 回合";
   const readAccount = survival.data?.accounts.find(
     (account) => account.account_type === "read",
   );
@@ -106,7 +121,7 @@ export function AgentSidebar() {
       <header>
         <div>
           <span>Agent 状态</span>
-          <small>第 5 阶段实时记忆</small>
+          <small>第 6 阶段认知整理</small>
         </div>
         <i aria-label="系统在线" />
       </header>
@@ -151,8 +166,8 @@ export function AgentSidebar() {
           }
           detail={
             memory.data?.deferred_count
-              ? `${memory.data.deferred_count} 条等待第 6 阶段整理`
-              : "显式要求从下一回合生效"
+              ? `${memory.data.deferred_count} 条等待认知整理`
+              : `正式记忆 v${memory.data?.current_memory_version ?? 0}`
           }
           percent={
             memory.data
@@ -189,7 +204,7 @@ export function AgentSidebar() {
             <Database size={14} /> WebSocket 流式 <b>就绪</b>
           </p>
           <p>
-            <Gauge size={14} /> 认知整理 <b>待触发</b>
+            <Gauge size={14} /> 认知整理 <b>{cognitiveLabel}</b>
           </p>
         </section>
 

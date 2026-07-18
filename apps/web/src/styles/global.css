@@ -1089,6 +1089,27 @@ button {
   font-size: 10px;
   font-style: normal;
 }
+.memory-actions { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.memory-actions button, .revision-panel button, .job-row button { min-height: 30px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; color: #3e566d; background: #f5f8fa; border: 1px solid #d5dde5; border-radius: 5px; font-size: 11px; }
+.memory-actions svg, .revision-panel svg { width: 13px; }
+.revision-panel { margin: 20px 0; padding: 17px; background: #fff; border: 1px solid var(--border); border-radius: 9px; }
+.memory-editor { margin: 20px 0; padding: 17px; background: #fff; border: 1px solid var(--border); border-radius: 9px; }
+.memory-editor header, .memory-editor > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.memory-editor header span { color: var(--muted); font-size: 11px; }
+.memory-editor textarea { width: 100%; min-height: 130px; margin: 12px 0; padding: 11px; resize: vertical; border: 1px solid #cfd8e2; border-radius: 6px; }
+.memory-editor > div { justify-content: flex-end; }
+.memory-editor > div button { min-height: 36px; padding: 0 12px; }
+.memory-editor .error { color: #a43b3b; font-size: 11px; }
+.revision-panel header, .revision-panel header div, .revision-panel article > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.revision-panel article { margin-top: 12px; padding: 13px; background: #f7f9fb; border-radius: 7px; }
+.revision-panel article p { font-size: 12px; }
+.revision-panel article small { color: var(--muted); }
+.revision-panel article > button, .revision-panel article > em { margin-top: 9px; }
+.section-heading { margin: 28px 0 14px; font-size: 15px; }
+.job-row { min-height: 64px; }
+.job-row .status-text { white-space: nowrap; }
+.job-row > span:last-child { display: flex; align-items: center; justify-content: space-between; gap: 6px; overflow: hidden; font-size: 10px; line-height: 1.45; }
+.status-text.failed, .status-text.conflict { color: #a43b3b; }
 .memory-list article span.deferred_capacity {
   color: #a16b16;
   background: #fff1d2;

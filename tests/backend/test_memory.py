@@ -65,14 +65,12 @@ def test_explicit_instruction_is_injected_only_from_the_next_turn(
         client, monkeypatch, conversation["id"], "以后不要使用 CLI"
     )
     assert first_provider.memory_messages == []
-    delta_event = next(
-        event for event in first_events if event["event"] == "memory.delta_created"
-    )
+    delta_event = next(event for event in first_events if event["event"] == "memory.delta_created")
     revision_id = delta_event["data"]["memory_delta"]["revision_id"]
     assert delta_event["data"]["memory_delta"]["status"] == "pending"
-    assert client.get(f"/api/turns/{first['id']}/execution-trace").json()[
-        "memory_revision_ids"
-    ] == []
+    assert (
+        client.get(f"/api/turns/{first['id']}/execution-trace").json()["memory_revision_ids"] == []
+    )
 
     second, _, second_provider = _complete(
         client, monkeypatch, conversation["id"], "请说明你会采用什么交互方式"

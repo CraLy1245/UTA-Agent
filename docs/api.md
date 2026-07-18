@@ -37,14 +37,24 @@
 
 反馈请求的 `rating` 为 `satisfied` 或 `unsatisfied`，`comment` 可选且最多 2,000 字符。响应明确拆分为 `quality_feedback` 和 `survival_reward`：前者每次都追加历史事件，后者只在首次满意时返回两条奖励交易。评价可以修改，但奖励不撤销，也不会因重复满意再次发放。
 
-生存状态以 Units 返回余额与最近一个真实 execution trace 的本轮用量，`100 Units = 1 Token`。交易金额扣款为负、奖励为正。执行轨迹包含 Provider 原始 Usage、归一化 Usage、模型名、真实工具名、延迟和结构化结果；`memory_revision_ids` 从第 5 阶段开始只填本轮实际注入的实时记忆 revision，Skill 数组仍等待第 7 阶段。
+生存状态以 Units 返回余额与最近一个真实 execution trace 的本轮用量，`100 Units = 1 Token`。交易金额扣款为负、奖励为正。执行轨迹包含 Provider 原始 Usage、归一化 Usage、模型名、真实工具名、延迟和结构化结果；`memory_revision_ids` 只填本轮实际注入的正式及实时 revision，Skill 数组仍等待第 7 阶段。
 
-## 实时记忆
+## 记忆与认知 Job
 
 - `GET /api/memory?status={status}&query={text}`
 - `GET /api/memory/status`
+- `GET /api/memory/items?status={status}&category={category}&query={text}`
+- `POST /api/memory/items`
+- `PATCH /api/memory/items/{id}`（必须提交 `expected_revision_id`）
+- `POST /api/memory/items/{id}/lock|unlock|archive|restore`
+- `GET /api/memory/items/{id}/revisions`
+- `POST /api/memory/items/{id}/rollback/{revisionId}`
+- `GET /api/cognitive-jobs`
+- `GET /api/cognitive-jobs/{id}`
+- `POST /api/cognitive-jobs/{id}/retry`
+- `POST /api/cognitive-jobs/run`（本地调试，只领取一个已存在 Job）
 
-列表返回用户原始显式表达、来源回合、revision ID、优先级、状态与字符数。状态接口分别返回有效/等待整理字符数、2,000 字符上限和记录数；正式长期记忆占用在第 6 阶段前固定为零，不提供虚构版本。
+实时列表返回用户原始显式表达、来源回合、revision ID、优先级、状态、字符数与 consumed Job。正式记忆接口返回稳定 item ID、当前 revision、锁定/状态和字符数；历史与归档从不永久删除。状态接口返回正式 18,000、实时 2,000 的实际占用与当前 memory version。
 
 ## WebSocket
 
@@ -61,6 +71,8 @@
 ```
 
 对话发送 `turn.started`、`assistant.delta`、`usage.updated`、`balance.updated`、`assistant.completed`、`assistant.cancelled` 和 `error`。第 3 阶段另发送 `tool.started`、`tool.completed`、`tool.failed`；第 5 阶段在当前用户消息形成显式增量时发送 `memory.delta_created`，只携带结构化 ID、revision、来源、优先级、状态和字符数，不回显完整记忆。`usage.updated` 同时携带归一化字段与 Provider 原始 Usage，`balance.updated` 在扣款事务提交后携带账户余额和本轮 Units 变化。反馈通过 REST 返回同样的结构化分离结果。前端不得解析自然语言推断运行状态。
+
+独立 `WS /api/ws/cognitive-jobs` 发送 `cognitive.job_started`、`cognitive.job_completed`、`cognitive.job_failed`，信封包含 `job_id`、时间戳及结构化状态/范围/尝试次数/错误/版本，不伪造 conversation 或 turn ID。
 
 ## Provider
 

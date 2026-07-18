@@ -82,9 +82,7 @@ class OpenAICompatibleProvider:
                 error_body = (await response.aread()).decode(errors="replace")[:1000]
                 await response.aclose()
                 if "max_tokens" in error_body:
-                    response = await self._send(
-                        client, messages, "max_completion_tokens", tools
-                    )
+                    response = await self._send(client, messages, "max_completion_tokens", tools)
                 else:
                     raise ProviderError(f"Provider rejected the request (HTTP 400): {error_body}")
             if response.is_error:
@@ -128,9 +126,7 @@ class OpenAICompatibleProvider:
             ]
             return sorted(set(models))
         except (httpx.HTTPError, json.JSONDecodeError) as exc:
-            raise ProviderError(
-                f"Provider model discovery failed: {type(exc).__name__}"
-            ) from exc
+            raise ProviderError(f"Provider model discovery failed: {type(exc).__name__}") from exc
         finally:
             if owns_client:
                 await client.aclose()
@@ -170,9 +166,7 @@ class OpenAICompatibleProvider:
         if choices:
             choice = choices[0]
             message_part = choice.get("delta") or choice.get("message") or {}
-            content = OpenAICompatibleProvider._content_text(
-                message_part.get("content")
-            )
+            content = OpenAICompatibleProvider._content_text(message_part.get("content"))
             if content is None:
                 # Some compatible gateways accept stream=true but return a
                 # regular Chat Completion object in the response body.
@@ -181,9 +175,7 @@ class OpenAICompatibleProvider:
                 )
             if content is None:
                 content = OpenAICompatibleProvider._content_text(choice.get("text"))
-            tool_calls = OpenAICompatibleProvider._tool_call_deltas(
-                message_part.get("tool_calls")
-            )
+            tool_calls = OpenAICompatibleProvider._tool_call_deltas(message_part.get("tool_calls"))
         if content is None:
             content = OpenAICompatibleProvider._content_text(payload.get("output_text"))
         if content is None and payload.get("type") == "response.output_text.delta":

@@ -3,6 +3,9 @@ import type {
   ConversationSummary,
   FeedbackResult,
   MemoryDelta,
+  MemoryItem,
+  MemoryRevision,
+  CognitiveJob,
   MemoryStatus,
   ModelSetting,
   SurvivalStatus,
@@ -71,6 +74,22 @@ export const chatApi = {
     const suffix = params.size ? `?${params.toString()}` : "";
     return request<MemoryDelta[]>(`/memory${suffix}`);
   },
+  getMemoryItems: (status?: string, query?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (query) params.set("query", query);
+    return request<MemoryItem[]>(`/memory/items${params.size ? `?${params}` : ""}`);
+  },
+  createMemoryItem: (payload: Pick<MemoryItem, "title" | "content" | "category" | "tags" | "priority">) =>
+    request<MemoryItem>("/memory/items", { method: "POST", body: JSON.stringify(payload) }),
+  updateMemoryItem: (item: MemoryItem, content: string) =>
+    request<MemoryItem>(`/memory/items/${item.id}`, { method: "PATCH", body: JSON.stringify({ expected_revision_id: item.current_revision_id, content }) }),
+  memoryAction: (itemId: string, action: "lock" | "unlock" | "archive" | "restore") =>
+    request<MemoryItem>(`/memory/items/${itemId}/${action}`, { method: "POST" }),
+  getMemoryRevisions: (itemId: string) => request<MemoryRevision[]>(`/memory/items/${itemId}/revisions`),
+  rollbackMemory: (itemId: string, revisionId: string) => request<MemoryItem>(`/memory/items/${itemId}/rollback/${revisionId}`, { method: "POST" }),
+  getCognitiveJobs: () => request<CognitiveJob[]>("/cognitive-jobs"),
+  retryCognitiveJob: (jobId: string) => request<CognitiveJob>(`/cognitive-jobs/${jobId}/retry`, { method: "POST" }),
   submitFeedback: (
     turnId: string,
     rating: "satisfied" | "unsatisfied",

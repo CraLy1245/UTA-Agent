@@ -47,9 +47,7 @@ async def test_openai_compatible_provider_streams_content_and_usage() -> None:
         ]
         events = [
             event
-            async for event in provider.stream(
-                [{"role": "user", "content": "hi"}], tools=tools
-            )
+            async for event in provider.stream([{"role": "user", "content": "hi"}], tools=tools)
         ]
 
     assert "".join(event.delta or "" for event in events) == "你好"
@@ -122,7 +120,7 @@ def test_parse_streaming_tool_call_deltas() -> None:
     )
     second = OpenAICompatibleProvider._parse_line(
         'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
-        '"function":{"arguments":"{\\\"path\\\":\\\"notes.txt\\\"}"}}]}}]}'
+        '"function":{"arguments":"{\\"path\\":\\"notes.txt\\"}"}}]}}]}'
     )
 
     assert first is not None and second is not None

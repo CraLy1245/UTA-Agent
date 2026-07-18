@@ -81,6 +81,7 @@ class TurnRead(BaseModel):
     error_message: str | None
     input_tokens: int | None
     output_tokens: int | None
+    completed_number: int | None
     created_at: datetime
     started_at: datetime | None
     completed_at: datetime | None

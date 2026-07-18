@@ -126,6 +126,42 @@ function mockApi() {
           formal_memory_char_limit: 18000,
           current_memory_version: null,
         });
+      if (url.includes("/memory/items"))
+        return Response.json([
+          {
+            id: "formal-1",
+            category: "preference",
+            title: "交互偏好",
+            content: "请使用图形界面",
+            tags: ["interaction"],
+            priority: 98,
+            status: "active",
+            locked: false,
+            current_revision_id: "formal-revision-1",
+            char_count: 15,
+            created_at: now,
+            updated_at: now,
+          },
+        ]);
+      if (url.endsWith("/cognitive-jobs"))
+        return Response.json([
+          {
+            id: "job-1",
+            job_type: "memory_consolidation",
+            start_turn_number: 1,
+            end_turn_number: 20,
+            status: "completed",
+            memory_version_before: 0,
+            memory_version_after: 1,
+            attempt_count: 1,
+            error_message: null,
+            result_json: JSON.stringify({ summary: "已整理", counts: {} }),
+            next_attempt_at: null,
+            started_at: now,
+            completed_at: now,
+            created_at: now,
+          },
+        ]);
       if (url.endsWith("/memory") || url.includes("/memory?"))
         return Response.json([
           {
@@ -180,7 +216,7 @@ function renderApp(path = "/chat/mock-1") {
   );
 }
 
-describe("phase 5 application", () => {
+describe("phase 6 application", () => {
   beforeEach(() => {
     useUiStore.setState({
       conversationsCollapsed: false,
@@ -310,6 +346,7 @@ describe("phase 5 application", () => {
     await user.click(await screen.findByRole("link", { name: "记忆" }));
     expect(screen.getByRole("heading", { name: "记忆" })).toBeInTheDocument();
     expect(await screen.findByText("以后不要使用 CLI")).toBeInTheDocument();
+    expect(await screen.findByText("交互偏好")).toBeInTheDocument();
     expect(
       within(screen.getByRole("region", { name: "记忆占用" })).getByText(
         "15 / 2000",
@@ -321,6 +358,8 @@ describe("phase 5 application", () => {
     expect(
       screen.getByRole("heading", { name: "后台活动" }),
     ).toBeInTheDocument();
+    expect(await screen.findByText("回合 1—20")).toBeInTheDocument();
+    expect(screen.getByText("已完成 · 尝试 1")).toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "设置" }));
     expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
   });

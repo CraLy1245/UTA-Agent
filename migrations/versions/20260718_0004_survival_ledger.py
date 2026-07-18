@@ -86,16 +86,12 @@ def upgrade() -> None:
             server_default=sa.text("CURRENT_TIMESTAMP"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["feedback_event_id"], ["feedback_events.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["feedback_event_id"], ["feedback_events.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["turn_id"], ["turns.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idempotency_key"),
     )
-    op.create_index(
-        "ix_token_transactions_account_type", "token_transactions", ["account_type"]
-    )
+    op.create_index("ix_token_transactions_account_type", "token_transactions", ["account_type"])
     op.create_index(
         "ix_token_transactions_feedback_event_id",
         "token_transactions",
@@ -146,12 +142,8 @@ def downgrade() -> None:
     )
     op.drop_table("turn_execution_traces")
     op.drop_index("ix_token_transactions_turn_id", table_name="token_transactions")
-    op.drop_index(
-        "ix_token_transactions_transaction_type", table_name="token_transactions"
-    )
-    op.drop_index(
-        "ix_token_transactions_feedback_event_id", table_name="token_transactions"
-    )
+    op.drop_index("ix_token_transactions_transaction_type", table_name="token_transactions")
+    op.drop_index("ix_token_transactions_feedback_event_id", table_name="token_transactions")
     op.drop_index("ix_token_transactions_account_type", table_name="token_transactions")
     op.drop_table("token_transactions")
     op.drop_index("ix_feedback_events_turn_id", table_name="feedback_events")

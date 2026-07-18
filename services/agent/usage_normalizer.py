@@ -41,9 +41,7 @@ class UsageNormalizer:
         )
 
     @staticmethod
-    def _first_non_negative_int(
-        usage: dict[str, Any], fields: tuple[str, ...]
-    ) -> int | None:
+    def _first_non_negative_int(usage: dict[str, Any], fields: tuple[str, ...]) -> int | None:
         for field in fields:
             value = usage.get(field)
             if isinstance(value, int) and not isinstance(value, bool) and value >= 0:

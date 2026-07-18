@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0 - 2026-07-18
+
+### Added
+
+- 添加只在 assistant final 成功事务提交后分配的全局完整回合序号，以及每 20 回合唯一冻结范围的 Durable Cognitive Job。
+- 添加与前台解耦的 Cognitive Worker、启动恢复、10/30 秒自动重试、手动重试及 `pending/running/validating/committing/completed/failed/conflict` 状态。
+- 添加严格 JSON/Pydantic/ID/锁定/乐观版本/18,000 字符/2,000 字符/原始显式增量保真校验；失败完整保留旧记忆。
+- 添加 `memory_items`、不可变 `memory_revisions`、`memory_snapshots`、FTS5 检索、正式记忆动态注入和 consumed Job 链路。
+- 添加完整记忆管理与后台活动 API/页面，以及 `cognitive.job_started/completed/failed` 独立 WebSocket 事件。
+
+### Changed
+
+- execution trace 的 `memory_revision_ids` 同时记录本轮实际注入的正式 revision 与仍有效实时 delta revision。
+- 记忆页支持搜索、锁定/解锁、编辑接口、归档/恢复、历史与回滚；右侧栏显示正式版本和最近认知批次。
+
+### Security
+
+- Worker 模型只能提出操作，数据库变更由确定性代码在短写事务中校验并提交；模型网络调用期间不持 SQLite 写锁。
+- 认知错误持久化前脱敏疑似密钥；API Key 仍只来自环境变量，不写入 Job、trace、数据库或 Git。
+
 ## 0.6.0 - 2026-07-18
 
 ### Added

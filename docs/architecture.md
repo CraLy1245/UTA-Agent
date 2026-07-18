@@ -13,8 +13,8 @@ FastAPI API
                     └─ Workspace Tool Runtime
     └─ Survival API ─ Quality Feedback + Reward Service
 SQLite WAL
-    │ durable jobs（第 6 阶段启用）
-Cognitive Worker
+    │ cognitive_jobs + versioned memory
+Cognitive Worker ─ strict JSON proposal ─ deterministic commit validator
 ```
 
 ## Monorepo 边界
@@ -59,6 +59,16 @@ Cognitive Worker
 - Memory Context 是独立动态 system message，不重建固定工具或生存提示。execution trace 只记录实际放入本轮上下文的 revision IDs。
 - 实时有效内容上限为 2,000 Unicode Code Point。重复表达保留审计记录但不重复占额；容量不足时优先保留近期明确纠正，其他记录标记 `deferred_capacity` 而不删除。
 - 第 5 阶段不创建正式长期记忆、Revision/Snapshot、20 回合 Job 或 Worker；这些由第 6 阶段消费实时增量后实现。
+
+## 第 6 阶段认知整理边界
+
+- assistant final、消息、账本与 trace 在同一短写事务成功后，才递增 `completed_number`；取消、失败、工具事件、反馈和后台任务不计数。
+- `cognitive_jobs` 冻结连续 20 回合范围并以 `job_type + start + end` 唯一。Worker 领取后立即释放写锁，再读取完整批次、trace、质量反馈、正式记忆和实时增量调用后台模型。
+- 后台模型仅返回严格 JSON 操作建议。Pydantic 结构、真实 ID、来源回合、锁定项、expected revision、显式增量逐字保真、18,000/2,000 字符预算均由确定性代码验证。
+- `memory_items` 使用稳定 ID；每次 add/update/merge/archive/restore/rollback 都产生不可变 revision。成功批次在同一事务提交 snapshot、memory version、consumed delta 和 Job 完成状态。
+- 前台不等待 Worker。第 21 回合可继续读取旧正式记忆与有效增量；Worker 提交后，下一回合动态读取新正式 revision。用户并发编辑通过 `current_revision_id` 触发 conflict，Worker 不覆盖用户版本。
+- 正式检索优先核心/锁定/高优先级 4,000 字符，再以 SQLite FTS5 选择相关 6,000 字符，实时增量最多 2,000 字符；execution trace 保存实际注入 revision IDs。
+- 本阶段 `skill_index` 和 `skill_operations` 必须为空，不实现第 7 阶段 Skill 演化。
 
 ## 长期可替换性
 

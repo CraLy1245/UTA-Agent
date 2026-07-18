@@ -138,9 +138,7 @@ def apply_transaction(
     metadata: dict[str, Any],
 ) -> LedgerEntry:
     existing = db.scalar(
-        select(TokenTransaction).where(
-            TokenTransaction.idempotency_key == idempotency_key
-        )
+        select(TokenTransaction).where(TokenTransaction.idempotency_key == idempotency_key)
     )
     if existing is not None:
         return LedgerEntry(existing, False)

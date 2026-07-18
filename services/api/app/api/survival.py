@@ -34,18 +34,14 @@ SessionDep = Annotated[Session, Depends(get_db)]
 
 
 @router.get("/status", response_model=SurvivalStatusRead)
-def get_survival_status(
-    db: SessionDep, conversation_id: str | None = None
-) -> SurvivalStatusRead:
+def get_survival_status(db: SessionDep, conversation_id: str | None = None) -> SurvivalStatusRead:
     accounts = list(db.scalars(select(TokenAccount).order_by(TokenAccount.account_type)))
     if len(accounts) != 2:
         raise HTTPException(status_code=503, detail="Token accounts are not initialized")
     trace_query = select(TurnExecutionTrace).join(Turn)
     if conversation_id:
         trace_query = trace_query.where(Turn.conversation_id == conversation_id)
-    latest_trace = db.scalar(
-        trace_query.order_by(TurnExecutionTrace.created_at.desc()).limit(1)
-    )
+    latest_trace = db.scalar(trace_query.order_by(TurnExecutionTrace.created_at.desc()).limit(1))
     latest_summary = None
     latest_turn = db.get(Turn, latest_trace.turn_id) if latest_trace else None
     if latest_trace and latest_turn and latest_turn.completed_at:
@@ -81,18 +77,14 @@ def list_transactions(
 
 
 @turn_router.post("/{turn_id}/feedback", response_model=FeedbackResultRead)
-def create_feedback(
-    turn_id: str, payload: FeedbackCreate, db: SessionDep
-) -> FeedbackResultRead:
+def create_feedback(turn_id: str, payload: FeedbackCreate, db: SessionDep) -> FeedbackResultRead:
     db.connection().exec_driver_sql("BEGIN IMMEDIATE")
     turn = db.get(Turn, turn_id)
     if turn is None:
         raise HTTPException(status_code=404, detail="Turn not found")
     if turn.status != "completed":
         raise HTTPException(status_code=409, detail="Only completed turns can be rated")
-    trace = db.scalar(
-        select(TurnExecutionTrace).where(TurnExecutionTrace.turn_id == turn_id)
-    )
+    trace = db.scalar(select(TurnExecutionTrace).where(TurnExecutionTrace.turn_id == turn_id))
     if trace is None:
         raise HTTPException(status_code=409, detail="Turn execution trace is missing")
 
@@ -111,8 +103,7 @@ def create_feedback(
         survival_reward=SurvivalRewardRead(
             granted_now=reward_was_granted(reward_entries),
             transactions=[
-                TokenTransactionRead.model_validate(entry.transaction)
-                for entry in reward_entries
+                TokenTransactionRead.model_validate(entry.transaction) for entry in reward_entries
             ],
         ),
     )
@@ -120,9 +111,7 @@ def create_feedback(
 
 @turn_router.get("/{turn_id}/execution-trace", response_model=ExecutionTraceRead)
 def get_execution_trace(turn_id: str, db: SessionDep) -> TurnExecutionTrace:
-    trace = db.scalar(
-        select(TurnExecutionTrace).where(TurnExecutionTrace.turn_id == turn_id)
-    )
+    trace = db.scalar(select(TurnExecutionTrace).where(TurnExecutionTrace.turn_id == turn_id))
     if trace is None:
         raise HTTPException(status_code=404, detail="Execution trace not found")
     return trace

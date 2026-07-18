@@ -55,6 +55,18 @@
 
 来源回合 ID 以不可变审计值保存，因此用户删除会话时不会级联删除已经形成的记忆。第 6 阶段创建正式记忆与 revision 后，可通过 `consumed_by_job_id` 建立整理链路。
 
+## 第 6 阶段表
+
+- `turns.completed_number`：可空全局唯一序号，只给成功最终提交的完整回合赋值。
+- `cognitive_state`：单行保存完成回合总数、最后成功整理回合及当前 memory version。
+- `cognitive_jobs`：保存冻结范围、状态、前后版本、尝试次数、下一重试时间、领取/起止时间、错误与结果；`job_type + start_turn_number + end_turn_number` 唯一。
+- `memory_items`：稳定记忆 ID、分类、标题、当前内容、标签、优先级、active/archived/superseded、锁定状态、当前 revision 和字符数。
+- `memory_revisions`：每次变化的完整不可变快照，含 previous revision、操作、来源回合、Job、创建者与原因。
+- `memory_snapshots`：每个 memory version 的生效 revision ID 列表与正式字符总数；认知 Job ID 唯一，用户手工版本允许空 Job。
+- `memory_items_fts`：SQLite FTS5 外部内容索引，由 insert/update/delete trigger 与 `memory_items` 保持一致。
+
+正式额度只统计 active `memory_items.char_count`，上限 18,000；实时额度只统计有效 `memory_delta`，上限 2,000。历史 revision、snapshot、archived/superseded item 不计入额度且不会永久删除。`current_revision_id`、`previous_revision_id`、来源 IDs 与 Job IDs 部分采用逻辑审计关联，提交校验负责一致性，避免 SQLite 循环外键阻碍原子版本切换。
+
 ## 数据路径
 
 开发默认数据库：`data/survival_agent.db`。路径可通过 `SURVIVAL_AGENT_DATABASE_URL` 覆盖。数据库文件、WAL 和共享内存文件均不提交 Git。

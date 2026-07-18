@@ -40,13 +40,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["conversation_id"], ["conversations.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["turn_id"], ["turns.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "turn_id", "provider_call_id", name="uq_tool_execution_turn_call"
-        ),
+        sa.UniqueConstraint("turn_id", "provider_call_id", name="uq_tool_execution_turn_call"),
     )
-    op.create_index(
-        "ix_tool_executions_conversation_id", "tool_executions", ["conversation_id"]
-    )
+    op.create_index("ix_tool_executions_conversation_id", "tool_executions", ["conversation_id"])
     op.create_index("ix_tool_executions_turn_id", "tool_executions", ["turn_id"])
     op.create_index("ix_tool_executions_status", "tool_executions", ["status"])
 

@@ -1,9 +1,11 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from services.api.app.api.cognitive_jobs import router as cognitive_jobs_router
 from services.api.app.api.conversations import router as conversations_router
 from services.api.app.api.conversations import turn_router
 from services.api.app.api.health import router as health_router
@@ -14,14 +16,21 @@ from services.api.app.api.survival import turn_router as survival_turn_router
 from services.api.app.api.tools import router as tools_router
 from services.api.app.api.websocket import router as websocket_router
 from services.api.app.core.config import get_settings
-from services.api.app.db.session import engine
+from services.api.app.db.session import SessionLocal, engine
+from services.memory.cognitive import cognitive_worker, recover_unfinished_jobs
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     with engine.connect() as connection:
         connection.exec_driver_sql("SELECT 1")
+    with SessionLocal() as db:
+        recover_unfinished_jobs(db)
+        db.commit()
+    worker_task = asyncio.create_task(cognitive_worker.run())
     yield
+    cognitive_worker.stop()
+    await worker_task
     engine.dispose()
 
 
@@ -36,6 +45,7 @@ app.add_middleware(
 )
 app.include_router(health_router, prefix="/api")
 app.include_router(memory_router, prefix="/api")
+app.include_router(cognitive_jobs_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
 app.include_router(turn_router, prefix="/api")
 app.include_router(model_settings_router, prefix="/api")

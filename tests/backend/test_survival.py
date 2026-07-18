@@ -15,8 +15,7 @@ class BalanceAwareProvider:
         self, messages: list[dict[str, object]], tools: list[dict[str, object]] | None = None
     ) -> AsyncIterator[ProviderStreamEvent]:
         self.saw_balance = any(
-            "Runtime survival balance" in str(message.get("content", ""))
-            for message in messages
+            "Runtime survival balance" in str(message.get("content", "")) for message in messages
         )
         yield ProviderStreamEvent(delta="余额已读取")
         yield ProviderStreamEvent(
@@ -80,9 +79,7 @@ def test_completed_turn_debits_units_and_persists_immutable_trace(
     assert trace["memory_revision_ids"] == []
     assert trace["skill_revision_ids"] == []
 
-    status = client.get(
-        "/api/survival/status", params={"conversation_id": conversation_id}
-    ).json()
+    status = client.get("/api/survival/status", params={"conversation_id": conversation_id}).json()
     assert status["latest_turn"]["read_change_units"] == -100_000
 
 
@@ -108,9 +105,7 @@ def test_satisfied_reward_is_exactly_108_percent_and_idempotent(
     assert after_first["read"] == after_debit["read"] + 108_000
     assert after_first["output"] == after_debit["output"] + 32_400
 
-    repeated = client.post(
-        f"/api/turns/{turn_id}/feedback", json={"rating": "satisfied"}
-    )
+    repeated = client.post(f"/api/turns/{turn_id}/feedback", json={"rating": "satisfied"})
     assert repeated.status_code == 200
     assert repeated.json()["survival_reward"]["granted_now"] is False
     assert _balances(client) == after_first
@@ -122,9 +117,7 @@ def test_satisfied_reward_is_exactly_108_percent_and_idempotent(
     assert changed.status_code == 200
     assert changed.json()["survival_reward"]["transactions"] == []
     assert _balances(client) == after_first
-    feedback_history = client.get(f"/api/conversations/{conversation_id}").json()[
-        "feedback_events"
-    ]
+    feedback_history = client.get(f"/api/conversations/{conversation_id}").json()["feedback_events"]
     assert [event["rating"] for event in feedback_history] == [
         "satisfied",
         "satisfied",
@@ -139,13 +132,7 @@ def test_satisfied_reward_is_exactly_108_percent_and_idempotent(
     ]
     assert len(debit_transactions) == 2
     assert (
-        len(
-            [
-                item
-                for item in turn_transactions
-                if item["transaction_type"] == "survival_reward"
-            ]
-        )
+        len([item for item in turn_transactions if item["transaction_type"] == "survival_reward"])
         == 2
     )
 
@@ -171,9 +158,7 @@ def test_unsatisfied_feedback_never_rewards_tokens(client: TestClient, monkeypat
 def test_missing_usage_completes_with_zero_debit_and_auditable_trace(
     client: TestClient, monkeypatch
 ) -> None:
-    monkeypatch.setattr(
-        "services.agent.runtime._provider_for", lambda _: MissingUsageProvider()
-    )
+    monkeypatch.setattr("services.agent.runtime._provider_for", lambda _: MissingUsageProvider())
     conversation = client.post("/api/conversations", json={"title": "缺失 Usage"}).json()
     turn = client.post(
         f"/api/conversations/{conversation['id']}/turns", json={"content": "请回答"}

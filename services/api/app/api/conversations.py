@@ -44,9 +44,7 @@ def list_conversations(db: SessionDep) -> list[Conversation]:
 
 
 @router.post("", response_model=ConversationSummary, status_code=status.HTTP_201_CREATED)
-def create_conversation(
-    payload: ConversationCreate, db: SessionDep
-) -> Conversation:
+def create_conversation(payload: ConversationCreate, db: SessionDep) -> Conversation:
     conversation = Conversation(id=str(uuid4()), title=payload.title.strip())
     db.add(conversation)
     db.commit()
@@ -90,9 +88,7 @@ def delete_conversation(conversation_id: str, db: SessionDep) -> Response:
 
 
 @router.post("/{conversation_id}/turns", response_model=TurnRead, status_code=201)
-def create_turn(
-    conversation_id: str, payload: TurnCreate, db: SessionDep
-) -> Turn:
+def create_turn(conversation_id: str, payload: TurnCreate, db: SessionDep) -> Turn:
     db.connection().exec_driver_sql("BEGIN IMMEDIATE")
     conversation = _get_conversation(db, conversation_id)
     content = payload.content.strip()
@@ -118,9 +114,7 @@ def create_turn(
     conversation.updated_at = datetime.now(UTC)
     db.add_all([turn, message])
     db.flush()
-    capture_explicit_instruction(
-        db, source_turn_id=turn.id, user_text=content
-    )
+    capture_explicit_instruction(db, source_turn_id=turn.id, user_text=content)
     db.commit()
     db.refresh(turn)
     return turn

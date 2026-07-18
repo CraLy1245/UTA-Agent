@@ -22,9 +22,7 @@ class ToolResult:
     data: dict[str, Any]
 
     def model_content(self) -> str:
-        return json.dumps(
-            {"ok": self.ok, **self.data}, ensure_ascii=False, separators=(",", ":")
-        )
+        return json.dumps({"ok": self.ok, **self.data}, ensure_ascii=False, separators=(",", ":"))
 
 
 class WorkspaceToolRuntime:
@@ -151,9 +149,7 @@ class WorkspaceToolRuntime:
         try:
             target.relative_to(self.root)
         except ValueError as exc:
-            raise WorkspaceBoundaryError(
-                "path must stay inside the configured workspace"
-            ) from exc
+            raise WorkspaceBoundaryError("path must stay inside the configured workspace") from exc
         return target, normalized
 
     def _list_directory(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -216,9 +212,7 @@ class WorkspaceToolRuntime:
         try:
             resolved_parent.relative_to(self.root)
         except ValueError as exc:
-            raise WorkspaceBoundaryError(
-                "path must stay inside the configured workspace"
-            ) from exc
+            raise WorkspaceBoundaryError("path must stay inside the configured workspace") from exc
         temporary_path: str | None = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -248,7 +242,5 @@ class WorkspaceToolRuntime:
             return True
         stem = part.split(".", 1)[0].upper()
         return stem in {"CON", "PRN", "AUX", "NUL"} or (
-            len(stem) == 4
-            and stem[:3] in {"COM", "LPT"}
-            and stem[3] in "123456789"
+            len(stem) == 4 and stem[:3] in {"COM", "LPT"} and stem[3] in "123456789"
         )

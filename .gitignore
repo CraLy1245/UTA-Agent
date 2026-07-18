@@ -12,6 +12,7 @@ data/*.db
 data/*.db-*
 logs/
 playwright-report/
+.playwright-cli/
 test-results/
 output/
 workspace/
