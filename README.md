@@ -4,15 +4,15 @@ Survival Agent 是一个本地运行、图形优先、数据可恢复的 AI Agen
 
 ## 当前状态
 
-第 0、1、2 阶段已完成。前端使用正式 REST/WebSocket API，会话、回合和消息保存在 SQLite，OpenAI 兼容 Provider 支持 SSE 流式输出、停止生成和失败重试。第 2 阶段已使用真实 `gpt-5.6-sol` 完成回答、token 用量记录与刷新持久化验收。
+第 0、1、2、3 阶段已完成。前端使用正式 REST/WebSocket API，会话、回合、消息和工具执行记录保存在 SQLite。OpenAI 兼容 Provider 支持 SSE 流式输出、结构化工具调用、停止生成和失败重试。第 3 阶段已使用真实 `gpt-5.6-sol` 完成写文件、读文件、列目录、结果回传模型和越界拒绝验收。
 
 已实现页面：
 
-- `/chat/:conversationId`：创建/切换/重命名/删除会话，流式回答、停止生成、失败重试与刷新恢复。
+- `/chat/:conversationId`：创建/切换/重命名/删除会话，流式回答、工具执行状态与详情、停止生成、失败重试和刷新恢复。
 - `/memory`：记忆筛选、占用、来源与状态骨架。
 - `/skills`：Skill 列表、统计与版本信息骨架。
 - `/activity`：后台任务汇总与状态列表。
-- `/settings`：持久化 OpenAI 兼容 Base URL、模型、超时和输出上限；API Key 仅从环境变量读取。
+- `/settings`：持久化 OpenAI 兼容 Base URL、模型、超时和输出上限，并显示当前 Workspace 与可用工具；API Key 仅从环境变量读取。
 
 ## 目录
 
@@ -47,6 +47,8 @@ npm run dev:web
 访问 `http://localhost:5173`。API 健康检查位于 `http://127.0.0.1:8000/api/health`。
 
 模型 Base URL 应填 OpenAI 兼容 API 根路径，例如 `https://api.example.com/v1`；Provider 会在后面追加 `/chat/completions`。
+
+工具只能访问 `SURVIVAL_AGENT_WORKSPACE_PATH` 配置的 Workspace（默认 `./workspace`）。路径必须为相对路径；写入已有文件必须由模型显式传入 `overwrite=true`。Workspace 内容是本地用户数据，不提交 Git。
 
 ## 验证
 

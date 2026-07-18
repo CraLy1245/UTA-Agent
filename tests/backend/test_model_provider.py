@@ -35,14 +35,32 @@ async def test_openai_compatible_provider_streams_content_and_usage() -> None:
             ),
             client=client,
         )
-        events = [event async for event in provider.stream([{"role": "user", "content": "hi"}])]
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "description": "Read a file",
+                    "parameters": {"type": "object"},
+                },
+            }
+        ]
+        events = [
+            event
+            async for event in provider.stream(
+                [{"role": "user", "content": "hi"}], tools=tools
+            )
+        ]
 
     assert "".join(event.delta or "" for event in events) == "你好"
     assert events[-1].input_tokens == 7
     assert events[-1].output_tokens == 2
     assert seen_request is not None
     assert seen_request.headers["authorization"] == "Bearer test-secret"
-    assert json.loads(seen_request.content)["max_tokens"] == 100
+    request_payload = json.loads(seen_request.content)
+    assert request_payload["max_tokens"] == 100
+    assert request_payload["tools"] == tools
+    assert request_payload["tool_choice"] == "auto"
 
 
 @pytest.mark.asyncio
@@ -95,3 +113,19 @@ def test_event_field_shape_contains_names_but_not_values() -> None:
     assert event.field_shape == "root=choices,id;choice=delta;delta=reasoning"
     assert "secret-value" not in event.field_shape
     assert "private" not in event.field_shape
+
+
+def test_parse_streaming_tool_call_deltas() -> None:
+    first = OpenAICompatibleProvider._parse_line(
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1",'
+        '"type":"function","function":{"name":"read_file","arguments":""}}]}}]}'
+    )
+    second = OpenAICompatibleProvider._parse_line(
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
+        '"function":{"arguments":"{\\\"path\\\":\\\"notes.txt\\\"}"}}]}}]}'
+    )
+
+    assert first is not None and second is not None
+    assert first.tool_calls[0].id == "call-1"
+    assert first.tool_calls[0].name == "read_file"
+    assert second.tool_calls[0].arguments == '{"path":"notes.txt"}'

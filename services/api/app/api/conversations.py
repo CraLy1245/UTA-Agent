@@ -58,7 +58,9 @@ def get_conversation(conversation_id: str, db: SessionDep) -> Conversation:
     conversation = db.scalar(
         select(Conversation)
         .where(Conversation.id == conversation_id)
-        .options(selectinload(Conversation.messages))
+        .options(
+            selectinload(Conversation.messages), selectinload(Conversation.tool_executions)
+        )
     )
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")

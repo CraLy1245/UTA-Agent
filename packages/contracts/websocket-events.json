@@ -9,6 +9,9 @@
       "enum": [
         "turn.started",
         "assistant.delta",
+        "tool.started",
+        "tool.completed",
+        "tool.failed",
         "assistant.completed",
         "assistant.cancelled",
         "usage.updated",
@@ -18,7 +21,10 @@
     "conversation_id": { "type": "string", "format": "uuid" },
     "turn_id": { "type": "string", "format": "uuid" },
     "timestamp": { "type": "string", "format": "date-time" },
-    "data": { "type": "object" }
+    "data": {
+      "type": "object",
+      "description": "Event-specific payload. Tool events carry a durable tool execution in data.tool."
+    }
   },
   "additionalProperties": false
 }

@@ -75,6 +75,7 @@ function mockApi() {
       if (url.endsWith("/conversations/mock-1"))
         return Response.json({
           ...conversation,
+          tool_executions: [],
           messages: [
             {
               id: "assistant-1",
@@ -88,6 +89,12 @@ function mockApi() {
         });
       if (url.endsWith("/model-settings/main"))
         return Response.json(modelSetting);
+      if (url.endsWith("/tools/status"))
+        return Response.json({
+          enabled: true,
+          workspace_path: "C:/workspace",
+          available_tools: ["list_directory", "read_file", "write_file"],
+        });
       throw new Error(`Unexpected request: ${url}`);
     });
 }
@@ -105,7 +112,7 @@ function renderApp(path = "/chat/mock-1") {
   );
 }
 
-describe("phase 2 application", () => {
+describe("phase 3 application", () => {
   beforeEach(() => {
     useUiStore.setState({
       conversationsCollapsed: false,
@@ -140,6 +147,55 @@ describe("phase 2 application", () => {
     );
     await user.click(screen.getByRole("button", { name: "发送消息" }));
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    act(() =>
+      FakeWebSocket.instances[0].emit({
+        event: "tool.started",
+        conversation_id: "mock-1",
+        turn_id: "turn-1",
+        timestamp: now,
+        data: {
+          tool: {
+            id: "tool-1",
+            turn_id: "turn-1",
+            provider_call_id: "call-1",
+            call_sequence: 1,
+            tool_name: "read_file",
+            arguments: { path: "notes.txt" },
+            status: "running",
+            result: null,
+            error_message: null,
+            started_at: now,
+            completed_at: null,
+          },
+        },
+      }),
+    );
+    expect(await screen.findByText("读取文件")).toBeInTheDocument();
+    expect(screen.getByText("执行中")).toBeInTheDocument();
+    act(() =>
+      FakeWebSocket.instances[0].emit({
+        event: "tool.completed",
+        conversation_id: "mock-1",
+        turn_id: "turn-1",
+        timestamp: now,
+        data: {
+          tool: {
+            id: "tool-1",
+            turn_id: "turn-1",
+            provider_call_id: "call-1",
+            call_sequence: 1,
+            tool_name: "read_file",
+            arguments: { path: "notes.txt" },
+            status: "completed",
+            result: { ok: true, content: "hello" },
+            error_message: null,
+            started_at: now,
+            completed_at: now,
+          },
+        },
+      }),
+    );
+    expect(await screen.findByText("已完成")).toBeInTheDocument();
     act(() =>
       FakeWebSocket.instances[0].emit({
         event: "assistant.delta",

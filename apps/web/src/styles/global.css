@@ -491,6 +491,107 @@ button {
   border-left: 2px solid #93a1b2;
   font-size: 12px;
 }
+.tool-execution {
+  width: min(680px, calc(100% - 46px));
+  margin: 12px 0 0 46px;
+  overflow: hidden;
+  color: #3b4656;
+  background: #f8fafb;
+  border: 1px solid #d5dde6;
+  border-radius: 8px;
+}
+.tool-execution summary {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.tool-execution summary::-webkit-details-marker {
+  display: none;
+}
+.tool-execution summary > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.tool-execution summary b {
+  color: #263244;
+  font-size: 12px;
+}
+.tool-execution summary small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-execution summary em {
+  color: #8a651a;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+.tool-execution.completed summary em {
+  color: var(--green);
+}
+.tool-execution.failed {
+  border-color: #e5bcbc;
+}
+.tool-execution.failed summary em,
+.tool-execution__body > p {
+  color: #a43b3b;
+}
+.tool-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: #546273;
+  background: #e8edf2;
+  border-radius: 6px;
+}
+.tool-icon svg {
+  width: 14px;
+}
+.tool-execution__body {
+  display: grid;
+  gap: 10px;
+  padding: 11px 12px;
+  border-top: 1px solid #e0e6ec;
+}
+.tool-execution__body > div {
+  min-width: 0;
+}
+.tool-execution__body > div > b {
+  display: block;
+  margin-bottom: 5px;
+  color: #596577;
+  font-size: 10px;
+}
+.tool-execution__body pre {
+  max-height: 180px;
+  margin: 0;
+  padding: 9px;
+  overflow: auto;
+  color: #344155;
+  background: #fff;
+  border-radius: 5px;
+  font:
+    10px/1.55 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tool-execution__body > p {
+  margin: 0;
+  font-size: 11px;
+}
 .message-actions {
   display: flex;
   gap: 3px;
@@ -1169,6 +1270,9 @@ button {
   }
   .message-scroll {
     padding: 22px 14px;
+  }
+  .tool-execution {
+    width: calc(100% - 46px);
   }
   .composer-wrap {
     padding: 10px 12px;

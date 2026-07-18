@@ -27,11 +27,20 @@ class ProviderConfig:
 
 
 @dataclass(frozen=True)
+class ProviderToolCallDelta:
+    index: int
+    id: str | None = None
+    name: str | None = None
+    arguments: str = ""
+
+
+@dataclass(frozen=True)
 class ProviderStreamEvent:
     delta: str | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
     field_shape: str | None = None
+    tool_calls: tuple[ProviderToolCallDelta, ...] = ()
 
 
 class OpenAICompatibleProvider:
@@ -39,7 +48,12 @@ class OpenAICompatibleProvider:
         self.config = config
         self._client = client
 
-    def _payload(self, messages: list[dict[str, str]], token_field: str) -> dict[str, Any]:
+    def _payload(
+        self,
+        messages: list[dict[str, Any]],
+        token_field: str,
+        tools: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self.config.model,
             "messages": messages,
@@ -49,20 +63,27 @@ class OpenAICompatibleProvider:
         }
         if self.config.temperature is not None:
             payload["temperature"] = self.config.temperature
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
         return payload
 
     async def stream(
-        self, messages: list[dict[str, str]]
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[ProviderStreamEvent]:
         owns_client = self._client is None
         client = self._client or httpx.AsyncClient(timeout=self.config.timeout_seconds)
         try:
-            response = await self._send(client, messages, "max_tokens")
+            response = await self._send(client, messages, "max_tokens", tools)
             if response.status_code == 400:
                 error_body = (await response.aread()).decode(errors="replace")[:1000]
                 await response.aclose()
                 if "max_tokens" in error_body:
-                    response = await self._send(client, messages, "max_completion_tokens")
+                    response = await self._send(
+                        client, messages, "max_completion_tokens", tools
+                    )
                 else:
                     raise ProviderError(f"Provider rejected the request (HTTP 400): {error_body}")
             if response.is_error:
@@ -114,7 +135,11 @@ class OpenAICompatibleProvider:
                 await client.aclose()
 
     async def _send(
-        self, client: httpx.AsyncClient, messages: list[dict[str, str]], token_field: str
+        self,
+        client: httpx.AsyncClient,
+        messages: list[dict[str, Any]],
+        token_field: str,
+        tools: list[dict[str, Any]] | None,
     ) -> httpx.Response:
         request = client.build_request(
             "POST",
@@ -124,7 +149,7 @@ class OpenAICompatibleProvider:
                 "Accept": "text/event-stream",
                 "Content-Type": "application/json",
             },
-            json=self._payload(messages, token_field),
+            json=self._payload(messages, token_field, tools),
         )
         return await client.send(request, stream=True)
 
@@ -140,10 +165,12 @@ class OpenAICompatibleProvider:
             raise ProviderError("Provider returned an invalid streaming event") from exc
         choices = payload.get("choices") or []
         content = None
+        tool_calls: tuple[ProviderToolCallDelta, ...] = ()
         if choices:
             choice = choices[0]
+            message_part = choice.get("delta") or choice.get("message") or {}
             content = OpenAICompatibleProvider._content_text(
-                (choice.get("delta") or {}).get("content")
+                message_part.get("content")
             )
             if content is None:
                 # Some compatible gateways accept stream=true but return a
@@ -153,6 +180,9 @@ class OpenAICompatibleProvider:
                 )
             if content is None:
                 content = OpenAICompatibleProvider._content_text(choice.get("text"))
+            tool_calls = OpenAICompatibleProvider._tool_call_deltas(
+                message_part.get("tool_calls")
+            )
         if content is None:
             content = OpenAICompatibleProvider._content_text(payload.get("output_text"))
         if content is None and payload.get("type") == "response.output_text.delta":
@@ -163,7 +193,34 @@ class OpenAICompatibleProvider:
             input_tokens=usage.get("prompt_tokens") or usage.get("input_tokens"),
             output_tokens=usage.get("completion_tokens") or usage.get("output_tokens"),
             field_shape=OpenAICompatibleProvider._field_shape(payload),
+            tool_calls=tool_calls,
         )
+
+    @staticmethod
+    def _tool_call_deltas(value: object) -> tuple[ProviderToolCallDelta, ...]:
+        if not isinstance(value, list):
+            return ()
+        deltas: list[ProviderToolCallDelta] = []
+        for fallback_index, item in enumerate(value):
+            if not isinstance(item, dict):
+                continue
+            function = item.get("function")
+            if not isinstance(function, dict):
+                function = {}
+            raw_index = item.get("index", fallback_index)
+            index = raw_index if isinstance(raw_index, int) else fallback_index
+            call_id = item.get("id")
+            name = function.get("name")
+            arguments = function.get("arguments")
+            deltas.append(
+                ProviderToolCallDelta(
+                    index=index,
+                    id=call_id if isinstance(call_id, str) else None,
+                    name=name if isinstance(name, str) else None,
+                    arguments=arguments if isinstance(arguments, str) else "",
+                )
+            )
+        return tuple(deltas)
 
     @staticmethod
     def _field_shape(payload: dict[str, Any]) -> str:

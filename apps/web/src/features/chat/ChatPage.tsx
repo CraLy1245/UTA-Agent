@@ -10,12 +10,60 @@ import {
   Square,
   ThumbsDown,
   ThumbsUp,
+  Wrench,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { chatApi, turnWebSocketUrl } from "../../services/chat";
-import type { Message, StreamEvent, Turn } from "../../types/chat";
+import type {
+  Message,
+  StreamEvent,
+  ToolExecution,
+  Turn,
+} from "../../types/chat";
+
+const toolLabels: Record<string, string> = {
+  list_directory: "列出目录",
+  read_file: "读取文件",
+  write_file: "写入文件",
+};
+
+function ToolExecutionCard({ tool }: { tool: ToolExecution }) {
+  const statusLabel =
+    tool.status === "running"
+      ? "执行中"
+      : tool.status === "completed"
+        ? "已完成"
+        : "失败";
+  return (
+    <details className={`tool-execution ${tool.status}`}>
+      <summary>
+        <span className="tool-icon">
+          <Wrench />
+        </span>
+        <span>
+          <b>{toolLabels[tool.tool_name] ?? tool.tool_name}</b>
+          <small>{String(tool.arguments.path ?? "Workspace")}</small>
+        </span>
+        <em>{statusLabel}</em>
+      </summary>
+      <div className="tool-execution__body">
+        <div>
+          <b>参数</b>
+          <pre>{JSON.stringify(tool.arguments, null, 2)}</pre>
+        </div>
+        {tool.result ? (
+          <div>
+            <b>结果</b>
+            <pre>{JSON.stringify(tool.result, null, 2)}</pre>
+          </div>
+        ) : null}
+        {tool.error_message ? <p>{tool.error_message}</p> : null}
+      </div>
+    </details>
+  );
+}
 
 function MessageBubble({ message }: { message: Message }) {
   const [copied, setCopied] = useState(false);
@@ -91,6 +139,7 @@ export function ChatPage() {
   const [draft, setDraft] = useState("");
   const [streamingContent, setStreamingContent] = useState("");
   const [activeTurn, setActiveTurn] = useState<Turn | null>(null);
+  const [activeTools, setActiveTools] = useState<ToolExecution[]>([]);
   const [error, setError] = useState<string | null>(null);
   const detail = useQuery({
     queryKey: ["conversation", conversationId],
@@ -108,6 +157,7 @@ export function ChatPage() {
       streamConversationRef.current = null;
       setActiveTurn(null);
       setStreamingContent("");
+      setActiveTools([]);
     }
   }, [conversationId]);
 
@@ -118,6 +168,7 @@ export function ChatPage() {
       streamConversationRef.current = null;
       setActiveTurn(null);
       setStreamingContent("");
+      setActiveTools([]);
       void queryClient.invalidateQueries({
         queryKey: ["conversation", targetConversationId],
       });
@@ -131,6 +182,7 @@ export function ChatPage() {
       setActiveTurn(turn);
       streamConversationRef.current = turn.conversation_id;
       setStreamingContent("");
+      setActiveTools([]);
       setError(null);
       const socket = new WebSocket(turnWebSocketUrl(turn.id));
       socketRef.current = socket;
@@ -138,6 +190,18 @@ export function ChatPage() {
         const event = JSON.parse(message.data as string) as StreamEvent;
         if (event.event === "assistant.delta" && event.data.content)
           setStreamingContent((current) => current + event.data.content);
+        if (event.event.startsWith("tool.") && event.data.tool) {
+          const nextTool = event.data.tool;
+          setActiveTools((current) => {
+            const existing = current.findIndex(
+              (tool) => tool.id === nextTool.id,
+            );
+            if (existing === -1) return [...current, nextTool];
+            return current.map((tool, index) =>
+              index === existing ? nextTool : tool,
+            );
+          });
+        }
         if (
           event.event === "assistant.completed" ||
           event.event === "assistant.cancelled"
@@ -226,7 +290,19 @@ export function ChatPage() {
           </div>
         ) : null}
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <Fragment key={message.id}>
+            <MessageBubble message={message} />
+            {message.role === "user"
+              ? (detail.data?.tool_executions ?? [])
+                  .filter((tool) => tool.turn_id === message.turn_id)
+                  .map((tool) => (
+                    <ToolExecutionCard key={tool.id} tool={tool} />
+                  ))
+              : null}
+          </Fragment>
+        ))}
+        {activeTools.map((tool) => (
+          <ToolExecutionCard key={tool.id} tool={tool} />
         ))}
         {activeTurn && streamingContent ? (
           <div className="assistant-row">

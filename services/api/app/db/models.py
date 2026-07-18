@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from services.api.app.db.base import Base
@@ -23,6 +34,11 @@ class Conversation(Base):
     )
     turns: Mapped[list[Turn]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan"
+    )
+    tool_executions: Mapped[list[ToolExecution]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="ToolExecution.call_sequence",
     )
 
 
@@ -47,6 +63,9 @@ class Turn(Base):
 
     conversation: Mapped[Conversation] = relationship(back_populates="turns")
     messages: Mapped[list[Message]] = relationship(back_populates="turn")
+    tool_executions: Mapped[list[ToolExecution]] = relationship(
+        back_populates="turn", cascade="all, delete-orphan", order_by="ToolExecution.call_sequence"
+    )
 
 
 class Message(Base):
@@ -84,3 +103,43 @@ class ModelSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class ToolExecution(Base):
+    __tablename__ = "tool_executions"
+    __table_args__ = (
+        UniqueConstraint("turn_id", "provider_call_id", name="uq_tool_execution_turn_call"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    turn_id: Mapped[str] = mapped_column(
+        ForeignKey("turns.id", ondelete="CASCADE"), index=True
+    )
+    provider_call_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    call_sequence: Mapped[int] = mapped_column(Integer(), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    arguments_json: Mapped[str] = mapped_column(Text(), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    result_json: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    conversation: Mapped[Conversation] = relationship(back_populates="tool_executions")
+    turn: Mapped[Turn] = relationship(back_populates="tool_executions")
+
+    @property
+    def arguments(self) -> dict[str, object]:
+        value = json.loads(self.arguments_json)
+        return value if isinstance(value, dict) else {}
+
+    @property
+    def result(self) -> dict[str, object] | None:
+        if self.result_json is None:
+            return None
+        value = json.loads(self.result_json)
+        return value if isinstance(value, dict) else None

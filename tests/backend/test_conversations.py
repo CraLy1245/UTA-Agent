@@ -3,21 +3,58 @@ from collections.abc import AsyncIterator
 
 from fastapi.testclient import TestClient
 
-from services.agent.model_provider import ProviderStreamEvent
+from services.agent.model_provider import ProviderStreamEvent, ProviderToolCallDelta
+from services.agent.tool_runtime import WorkspaceToolRuntime
 
 
 class FakeProvider:
-    async def stream(self, _: list[dict[str, str]]) -> AsyncIterator[ProviderStreamEvent]:
+    async def stream(
+        self, _: list[dict[str, object]], tools: list[dict[str, object]] | None = None
+    ) -> AsyncIterator[ProviderStreamEvent]:
+        assert tools
         yield ProviderStreamEvent(delta="真实")
         yield ProviderStreamEvent(delta="流式回答")
         yield ProviderStreamEvent(input_tokens=11, output_tokens=4)
 
 
 class SlowProvider:
-    async def stream(self, _: list[dict[str, str]]) -> AsyncIterator[ProviderStreamEvent]:
+    async def stream(
+        self, _: list[dict[str, object]], tools: list[dict[str, object]] | None = None
+    ) -> AsyncIterator[ProviderStreamEvent]:
         yield ProviderStreamEvent(delta="开始")
         await asyncio.sleep(0.2)
         yield ProviderStreamEvent(delta="不应保存")
+
+
+class ToolLoopProvider:
+    def __init__(self, path: str = "notes/phase3.txt") -> None:
+        self.calls = 0
+        self.path = path
+        self.received_tool_result: str | None = None
+
+    async def stream(
+        self, messages: list[dict[str, object]], tools: list[dict[str, object]] | None = None
+    ) -> AsyncIterator[ProviderStreamEvent]:
+        assert tools
+        self.calls += 1
+        if self.calls == 1:
+            arguments = (
+                '{"path":"../outside.txt"}'
+                if self.path.startswith("..")
+                else '{"path":"notes/phase3.txt","content":"persisted","overwrite":false}'
+            )
+            name = "read_file" if self.path.startswith("..") else "write_file"
+            yield ProviderStreamEvent(
+                tool_calls=(
+                    ProviderToolCallDelta(index=0, id="call-1", name=name),
+                    ProviderToolCallDelta(index=0, arguments=arguments),
+                )
+            )
+            yield ProviderStreamEvent(input_tokens=10, output_tokens=2)
+            return
+        self.received_tool_result = str(messages[-1]["content"])
+        yield ProviderStreamEvent(delta="工具执行完成")
+        yield ProviderStreamEvent(input_tokens=20, output_tokens=3)
 
 
 def _create_turn(client: TestClient) -> tuple[str, str]:
@@ -99,3 +136,66 @@ def test_model_setting_never_accepts_or_returns_api_key(client: TestClient) -> N
     assert payload["base_url"] == "https://provider.example/v1"
     assert payload["api_key_env"] == "OPENAI_API_KEY"
     assert "api_key" not in payload
+
+
+def test_tool_loop_persists_events_and_returns_result_to_model(
+    client: TestClient, monkeypatch, tmp_path
+) -> None:
+    provider = ToolLoopProvider()
+    monkeypatch.setattr("services.agent.runtime._provider_for", lambda _: provider)
+    monkeypatch.setattr(
+        "services.agent.runtime._tool_runtime", lambda: WorkspaceToolRuntime(tmp_path)
+    )
+    conversation_id, turn_id = _create_turn(client)
+
+    with client.websocket_connect(f"/api/ws/turns/{turn_id}") as websocket:
+        events = []
+        while True:
+            event = websocket.receive_json()
+            events.append(event["event"])
+            if event["event"] == "assistant.completed":
+                break
+
+    assert events == [
+        "turn.started",
+        "tool.started",
+        "tool.completed",
+        "assistant.delta",
+        "usage.updated",
+        "assistant.completed",
+    ]
+    assert (tmp_path / "notes/phase3.txt").read_text(encoding="utf-8") == "persisted"
+    assert provider.received_tool_result is not None
+    assert '"ok":true' in provider.received_tool_result
+    detail = client.get(f"/api/conversations/{conversation_id}").json()
+    assert detail["tool_executions"][0]["status"] == "completed"
+    turn = client.get(f"/api/turns/{turn_id}").json()
+    assert turn["input_tokens"] == 30
+    assert turn["output_tokens"] == 5
+
+
+def test_path_escape_is_persisted_as_tool_failure_but_model_can_finish(
+    client: TestClient, monkeypatch, tmp_path
+) -> None:
+    provider = ToolLoopProvider(path="../outside.txt")
+    monkeypatch.setattr("services.agent.runtime._provider_for", lambda _: provider)
+    monkeypatch.setattr(
+        "services.agent.runtime._tool_runtime", lambda: WorkspaceToolRuntime(tmp_path)
+    )
+    conversation_id, turn_id = _create_turn(client)
+
+    with client.websocket_connect(f"/api/ws/turns/{turn_id}") as websocket:
+        events = []
+        while True:
+            event = websocket.receive_json()
+            events.append(event["event"])
+            if event["event"] == "assistant.completed":
+                break
+
+    assert "tool.failed" in events
+    assert provider.received_tool_result is not None
+    assert '"ok":false' in provider.received_tool_result
+    detail = client.get(f"/api/conversations/{conversation_id}").json()
+    execution = detail["tool_executions"][0]
+    assert execution["status"] == "failed"
+    assert "inside the configured workspace" in execution["error_message"]

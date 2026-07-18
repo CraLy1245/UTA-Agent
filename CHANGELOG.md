@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 - 2026-07-18
+
+### Added
+
+- 添加 `list_directory`、`read_file`、`write_file` 三个 Workspace 工具及 OpenAI 兼容结构化工具循环。
+- 添加 `tool_executions` SQLite/Alembic 持久化、工具状态 API 和 `tool.started/completed/failed` WebSocket 事件。
+- 前端显示实时及刷新恢复后的工具参数、结果、成功和失败状态。
+- 添加目录、读写、越界、覆盖保护、Provider 工具增量和多轮工具循环测试。
+
+### Changed
+
+- Provider 在模型请求中发送 JSON Schema 工具定义，并把每个工具结果按原始 `tool_call_id` 回传模型后继续生成。
+- 设置页显示实际解析后的 Workspace 路径与可用工具。
+
+### Security
+
+- 拒绝绝对路径、父目录穿越、Windows 驱动器/ADS/保留名和经符号链接或 junction 逃逸 Workspace 的路径。
+- 文件写入使用显式覆盖授权、大小限制与同目录原子替换；工具不提供删除、执行命令或网络访问能力。
+
 ## 0.3.0 - 2026-07-18
 
 ### Added

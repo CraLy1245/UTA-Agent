@@ -2,6 +2,7 @@ import type {
   ConversationDetail,
   ConversationSummary,
   ModelSetting,
+  ToolStatus,
   Turn,
 } from "../types/chat";
 
@@ -50,6 +51,7 @@ export const chatApi = {
   regenerateTurn: (turnId: string) =>
     request<Turn>(`/turns/${turnId}/regenerate`, { method: "POST" }),
   getModelSetting: () => request<ModelSetting>("/model-settings/main"),
+  getToolStatus: () => request<ToolStatus>("/tools/status"),
   updateModelSetting: (
     setting: Omit<
       ModelSetting,

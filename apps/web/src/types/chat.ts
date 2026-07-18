@@ -14,7 +14,25 @@ export type ConversationSummary = {
   updated_at: string;
 };
 
-export type ConversationDetail = ConversationSummary & { messages: Message[] };
+export type ToolExecution = {
+  id: string;
+  turn_id: string;
+  provider_call_id: string;
+  call_sequence: number;
+  tool_name: "list_directory" | "read_file" | "write_file" | string;
+  arguments: Record<string, unknown>;
+  status: "running" | "completed" | "failed";
+  result: Record<string, unknown> | null;
+  error_message: string | null;
+  created_at?: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+export type ConversationDetail = ConversationSummary & {
+  messages: Message[];
+  tool_executions: ToolExecution[];
+};
 
 export type Turn = {
   id: string;
@@ -40,6 +58,12 @@ export type ModelSetting = {
   updated_at: string;
 };
 
+export type ToolStatus = {
+  enabled: boolean;
+  workspace_path: string;
+  available_tools: string[];
+};
+
 export type StreamEvent = {
   event: string;
   conversation_id: string;
@@ -50,5 +74,6 @@ export type StreamEvent = {
     message?: Message | string;
     input_tokens?: number;
     output_tokens?: number;
+    tool?: ToolExecution;
   };
 };

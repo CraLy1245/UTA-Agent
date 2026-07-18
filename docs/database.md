@@ -27,6 +27,12 @@
 
 会话删除通过外键级联移除其消息与回合。重新生成回合复用原始用户消息，并通过 `source_turn_id` 保留来源。
 
+## 第 3 阶段表
+
+`tool_executions` 为每次模型工具调用保存：所属会话与回合、Provider 调用 ID、回合内序号、工具名、参数 JSON、pending/completed/failed 状态、结果 JSON、错误和起止时间。`turn_id + provider_call_id` 唯一，避免同一 Provider 调用被重复记账；会话或回合删除时级联清理。
+
+工具记录只保存模型给出的相对路径和结构化结果，不保存 API Key。文件实体位于配置的 Workspace，不进入数据库。
+
 ## 数据路径
 
 开发默认数据库：`data/survival_agent.db`。路径可通过 `SURVIVAL_AGENT_DATABASE_URL` 覆盖。数据库文件、WAL 和共享内存文件均不提交 Git。

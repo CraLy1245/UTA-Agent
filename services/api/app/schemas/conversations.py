@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,8 +33,26 @@ class ConversationSummary(BaseModel):
     updated_at: datetime
 
 
+class ToolExecutionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    turn_id: str
+    provider_call_id: str
+    call_sequence: int
+    tool_name: str
+    arguments: dict[str, object]
+    status: str
+    result: dict[str, object] | None
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
 class ConversationDetail(ConversationSummary):
     messages: list[MessageRead]
+    tool_executions: list[ToolExecutionRead]
 
 
 class TurnCreate(BaseModel):

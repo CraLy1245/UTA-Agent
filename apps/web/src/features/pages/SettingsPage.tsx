@@ -29,6 +29,10 @@ export function SettingsPage() {
     queryKey: ["model-setting", "main"],
     queryFn: chatApi.getModelSetting,
   });
+  const toolStatus = useQuery({
+    queryKey: ["tool-status"],
+    queryFn: chatApi.getToolStatus,
+  });
   const [form, setForm] = useState<ModelForm>(emptyForm);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
@@ -161,16 +165,30 @@ export function SettingsPage() {
         <section>
           <h2>本地工作区</h2>
           <label className="wide-field">
-            数据目录
-            <input value="%APPDATA%/SurvivalAgent/data" readOnly />
+            Workspace 路径
+            <input
+              value={toolStatus.data?.workspace_path ?? "加载中…"}
+              readOnly
+            />
           </label>
           <label className="toggle-row">
             <span>
               <b>启用本地文件工具</b>
-              <small>工具路径将在第 3 阶段限制到 Workspace 内。</small>
+              <small>
+                只提供列目录、读文件和写文件；绝对路径与越界访问会被拒绝。
+              </small>
             </span>
-            <input type="checkbox" disabled />
+            <input
+              type="checkbox"
+              checked={toolStatus.data?.enabled ?? false}
+              readOnly
+              aria-label="本地文件工具启用状态"
+            />
           </label>
+          <p className="settings-copy">
+            可用工具：
+            {toolStatus.data?.available_tools.join("、") || "无"}
+          </p>
         </section>
         <section className="danger-zone">
           <h2>危险操作</h2>
