@@ -6,6 +6,7 @@
 - 前端：`npm run test:web`，覆盖结构化流、反馈、管理页和设置页真实下载动作。
 - 独立 E2E：后端测试启动 `tests/e2e/phase8_backend_flow.py`，在全新 Alembic SQLite 和独立应用进程中跑 22 回合闭环。
 - 浏览器：Playwright CLI 连接真实 8000 后端与 5173 前端，验收桌面/390px 设置页、真实下载及 0 console error。
+- 桌面：`phase9_sidecar_flow.py` 启动真实 PyInstaller 进程；Cargo 测试空闲端口/目录；Computer Use 验收安装后的 Tauri 图形窗口、重开持久化和进程回收。
 
 ## 崩溃恢复语义
 
@@ -23,4 +24,14 @@ uv run pytest tests/backend/test_phase8_stability.py -q
 Invoke-RestMethod http://127.0.0.1:8000/api/health
 ```
 
-健康响应必须为 `journal_mode=wal`。不要复制正在写入的 `.db-wal`/`.db-shm` 单文件；设置页导出使用一致读快照，是当前阶段推荐的可移植恢复材料。第 9 阶段才增加桌面安装包与正式备份目录。
+健康响应必须为 `journal_mode=wal`。不要复制正在写入的 `.db-wal`/`.db-shm` 单文件；设置页导出使用一致读快照，是推荐的可移植恢复材料。桌面数据位于 `%APPDATA%/SurvivalAgent`，其中 `backups/` 为正式备份目标目录；卸载应用前后都应保留这一用户目录。
+
+## 桌面恢复检查
+
+```powershell
+npm run build:sidecar
+uv run python tests/e2e/phase9_sidecar_flow.py
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+```
+
+若桌面窗口未出现，先查看 `%APPDATA%/SurvivalAgent/logs/desktop-launch.log`，再检查四个目录权限和安装资源中的 `resources/sidecar/survival-agent-api.exe`。不要把 API Key 或代理凭据复制进日志；密钥应由设置页写入 Windows 凭据管理器。

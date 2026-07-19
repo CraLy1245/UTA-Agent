@@ -16,11 +16,10 @@ import type {
   ToolStatus,
   Turn,
 } from "../types/chat";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
+import { apiBaseUrl, desktopWsBaseUrl } from "./desktop";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(`${apiBaseUrl()}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
@@ -36,11 +35,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function download(path: string): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
-  if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+async function download(
+  path: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(`${apiBaseUrl()}${path}`);
+  if (!response.ok)
+    throw new Error(`Request failed with status ${response.status}`);
   const disposition = response.headers.get("Content-Disposition") ?? "";
-  const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? "survival-agent-export.json";
+  const filename =
+    disposition.match(/filename="([^"]+)"/)?.[1] ??
+    "survival-agent-export.json";
   return { blob: await response.blob(), filename };
 }
 
@@ -90,37 +94,91 @@ export const chatApi = {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
     if (query) params.set("query", query);
-    return request<MemoryItem[]>(`/memory/items${params.size ? `?${params}` : ""}`);
+    return request<MemoryItem[]>(
+      `/memory/items${params.size ? `?${params}` : ""}`,
+    );
   },
-  createMemoryItem: (payload: Pick<MemoryItem, "title" | "content" | "category" | "tags" | "priority">) =>
-    request<MemoryItem>("/memory/items", { method: "POST", body: JSON.stringify(payload) }),
+  createMemoryItem: (
+    payload: Pick<
+      MemoryItem,
+      "title" | "content" | "category" | "tags" | "priority"
+    >,
+  ) =>
+    request<MemoryItem>("/memory/items", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   updateMemoryItem: (item: MemoryItem, content: string) =>
-    request<MemoryItem>(`/memory/items/${item.id}`, { method: "PATCH", body: JSON.stringify({ expected_revision_id: item.current_revision_id, content }) }),
-  memoryAction: (itemId: string, action: "lock" | "unlock" | "archive" | "restore") =>
-    request<MemoryItem>(`/memory/items/${itemId}/${action}`, { method: "POST" }),
-  getMemoryRevisions: (itemId: string) => request<MemoryRevision[]>(`/memory/items/${itemId}/revisions`),
-  rollbackMemory: (itemId: string, revisionId: string) => request<MemoryItem>(`/memory/items/${itemId}/rollback/${revisionId}`, { method: "POST" }),
+    request<MemoryItem>(`/memory/items/${item.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        expected_revision_id: item.current_revision_id,
+        content,
+      }),
+    }),
+  memoryAction: (
+    itemId: string,
+    action: "lock" | "unlock" | "archive" | "restore",
+  ) =>
+    request<MemoryItem>(`/memory/items/${itemId}/${action}`, {
+      method: "POST",
+    }),
+  getMemoryRevisions: (itemId: string) =>
+    request<MemoryRevision[]>(`/memory/items/${itemId}/revisions`),
+  rollbackMemory: (itemId: string, revisionId: string) =>
+    request<MemoryItem>(`/memory/items/${itemId}/rollback/${revisionId}`, {
+      method: "POST",
+    }),
   getCognitiveJobs: () => request<CognitiveJob[]>("/cognitive-jobs"),
-  retryCognitiveJob: (jobId: string) => request<CognitiveJob>(`/cognitive-jobs/${jobId}/retry`, { method: "POST" }),
+  retryCognitiveJob: (jobId: string) =>
+    request<CognitiveJob>(`/cognitive-jobs/${jobId}/retry`, { method: "POST" }),
   getSkills: (status?: string, query?: string) => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
     if (query) params.set("query", query);
     return request<Skill[]>(`/skills${params.size ? `?${params}` : ""}`);
   },
-  createSkill: (payload: Pick<Skill, "name" | "description" | "content"> & { reason: string }) =>
-    request<Skill>("/skills", { method: "POST", body: JSON.stringify(payload) }),
-  updateSkill: (skill: Skill, content: string) => request<Skill>(`/skills/${skill.id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ expected_revision_id: skill.stable_revision_id, content, reason: "用户编辑" }),
-  }),
-  skillAction: (skillId: string, action: "lock" | "unlock" | "archive" | "restore") =>
-    request<Skill>(`/skills/${skillId}/${action}`, { method: "POST" }),
-  getSkillEvolution: (skillId: string) => request<SkillEvolution>(`/skills/${skillId}/evolution`),
-  getSkillEvolutionEvents: () => request<SkillEvolutionEvent[]>("/skills/evolution-events"),
-  candidateAction: (skillId: string, revisionId: string, action: "promote" | "reject" | "pause", reason: string) =>
-    request<Skill>(`/skills/${skillId}/candidate/${revisionId}/${action}`, { method: "POST", body: JSON.stringify({ reason }) }),
-  rollbackSkill: (skillId: string, revisionId: string) => request<Skill>(`/skills/${skillId}/rollback/${revisionId}`, { method: "POST", body: JSON.stringify({ reason: "用户手动回滚" }) }),
+  createSkill: (
+    payload: Pick<Skill, "name" | "description" | "content"> & {
+      reason: string;
+    },
+  ) =>
+    request<Skill>("/skills", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateSkill: (skill: Skill, content: string) =>
+    request<Skill>(`/skills/${skill.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        expected_revision_id: skill.stable_revision_id,
+        content,
+        reason: "用户编辑",
+      }),
+    }),
+  skillAction: (
+    skillId: string,
+    action: "lock" | "unlock" | "archive" | "restore",
+  ) => request<Skill>(`/skills/${skillId}/${action}`, { method: "POST" }),
+  getSkillEvolution: (skillId: string) =>
+    request<SkillEvolution>(`/skills/${skillId}/evolution`),
+  getSkillEvolutionEvents: () =>
+    request<SkillEvolutionEvent[]>("/skills/evolution-events"),
+  candidateAction: (
+    skillId: string,
+    revisionId: string,
+    action: "promote" | "reject" | "pause",
+    reason: string,
+  ) =>
+    request<Skill>(`/skills/${skillId}/candidate/${revisionId}/${action}`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  rollbackSkill: (skillId: string, revisionId: string) =>
+    request<Skill>(`/skills/${skillId}/rollback/${revisionId}`, {
+      method: "POST",
+      body: JSON.stringify({ reason: "用户手动回滚" }),
+    }),
   submitFeedback: (
     turnId: string,
     rating: "satisfied" | "unsatisfied",
@@ -143,6 +201,8 @@ export const chatApi = {
 };
 
 export function turnWebSocketUrl(turnId: string): string {
+  const desktop = desktopWsBaseUrl();
+  if (desktop) return `${desktop.replace(/\/$/, "")}/turns/${turnId}`;
   const configured = import.meta.env.VITE_WS_BASE_URL as string | undefined;
   if (configured) return `${configured.replace(/\/$/, "")}/turns/${turnId}`;
   if (import.meta.env.DEV) return `ws://127.0.0.1:8000/api/ws/turns/${turnId}`;

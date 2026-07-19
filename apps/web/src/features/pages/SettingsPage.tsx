@@ -3,6 +3,11 @@ import { CheckCircle2, Download, KeyRound, Save, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { chatApi } from "../../services/chat";
+import {
+  desktopHasSecureApiKey,
+  isDesktopRuntime,
+  storeDesktopApiKey,
+} from "../../services/desktop";
 import { PageScaffold } from "./PageScaffold";
 
 type ModelForm = {
@@ -15,8 +20,8 @@ type ModelForm = {
 };
 
 const emptyForm: ModelForm = {
-  base_url: "https://api.openai.com/v1",
-  model: "gpt-5.6",
+  base_url: "https://api.a6api.com/v1",
+  model: "gpt-5.6-sol",
   timeout_seconds: 120,
   max_output_tokens: 8192,
   temperature: null,
@@ -36,6 +41,8 @@ export function SettingsPage() {
   const [form, setForm] = useState<ModelForm>(emptyForm);
   const [saved, setSaved] = useState(false);
   const [exported, setExported] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const desktop = isDesktopRuntime();
   useEffect(() => {
     if (!setting.data) return;
     setForm({
@@ -48,9 +55,14 @@ export function SettingsPage() {
     });
   }, [setting.data]);
   const save = useMutation({
-    mutationFn: chatApi.updateModelSetting,
+    mutationFn: async (values: ModelForm) => {
+      const result = await chatApi.updateModelSetting(values);
+      if (desktop && apiKey) await storeDesktopApiKey(apiKey);
+      return result;
+    },
     onSuccess: () => {
       setSaved(true);
+      setApiKey("");
       void queryClient.invalidateQueries({
         queryKey: ["model-setting", "main"],
       });
@@ -97,15 +109,33 @@ export function SettingsPage() {
             <h2>主对话模型</h2>
             <span
               className={
-                setting.data?.has_api_key ? "key-status ready" : "key-status"
+                setting.data?.has_api_key || desktopHasSecureApiKey()
+                  ? "key-status ready"
+                  : "key-status"
               }
             >
               <KeyRound />
-              {setting.data?.has_api_key
-                ? "环境密钥已就绪"
-                : "缺少 OPENAI_API_KEY"}
+              {setting.data?.has_api_key || desktopHasSecureApiKey()
+                ? desktop
+                  ? "系统凭据密钥已就绪"
+                  : "环境密钥已就绪"
+                : desktop
+                  ? "尚未保存系统凭据"
+                  : "缺少 OPENAI_API_KEY"}
             </span>
           </div>
+          {desktop ? (
+            <label className="wide-field">
+              API Key（Windows 凭据管理器）
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={apiKey}
+                placeholder="输入后随模型设置一起保存"
+                onChange={(event) => setApiKey(event.target.value)}
+              />
+            </label>
+          ) : null}
           <div className="form-grid">
             <label>
               API Base URL
@@ -161,10 +191,13 @@ export function SettingsPage() {
           <div className="credential-note">
             <CheckCircle2 />
             <div>
-              <b>密钥只从环境变量读取</b>
+              <b>
+                {desktop ? "密钥保存在操作系统凭据库" : "密钥只从环境变量读取"}
+              </b>
               <p>
-                在项目 `.env` 中设置 `OPENAI_API_KEY`，然后重启后端。设置 API
-                不接收密钥字段，SQLite 也不会保存明文密钥。
+                {desktop
+                  ? "桌面端不会把密钥写入 SQLite、日志或 Sidecar 参数。首次保存后重新打开应用即可加载。"
+                  : "在项目 `.env` 中设置 `OPENAI_API_KEY`，然后重启后端。设置 API 不接收密钥字段，SQLite 也不会保存明文密钥。"}
               </p>
             </div>
           </div>
@@ -218,9 +251,15 @@ export function SettingsPage() {
             onClick={() => exportData.mutate()}
           >
             <Download />
-            {exportData.isPending ? "导出中…" : exported ? "导出完成" : "导出 JSON"}
+            {exportData.isPending
+              ? "导出中…"
+              : exported
+                ? "导出完成"
+                : "导出 JSON"}
           </button>
-          {exportData.isError ? <p className="form-error">导出失败，请稍后重试。</p> : null}
+          {exportData.isError ? (
+            <p className="form-error">导出失败，请稍后重试。</p>
+          ) : null}
         </section>
         <section className="danger-zone">
           <h2>危险操作</h2>

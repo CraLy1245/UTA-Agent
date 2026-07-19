@@ -26,6 +26,7 @@ from services.memory.cognitive import (
     build_job_payload,
     claim_next_job,
     cognitive_event_hub,
+    cognitive_system_prompt,
     record_completed_turn,
     recover_unfinished_jobs,
 )
@@ -149,6 +150,20 @@ def test_strict_result_rejects_markdown_extra_fields_and_skill_operations() -> N
         CognitiveResult.model_validate({**valid, "skill_operations": [{"operation": "add"}]})
     with pytest.raises(ValidationError):
         CognitiveResult.model_validate_json(f"```json\n{json.dumps(valid)}\n```")
+
+
+def test_cognitive_prompt_disambiguates_memory_and_skill_operation_fields() -> None:
+    prompt = cognitive_system_prompt()
+
+    assert (
+        "A Skill operation may contain ONLY operation, skill_ids, name, description, content, "
+        "base_revision_id, expected_revision_ids, source_turn_ids, reason, expected_improvement"
+        in prompt
+    )
+    assert "Never put category, tags, priority, success" in prompt
+    assert '"operation":"add","skill_ids":[]' in prompt
+    assert '"operation":"create_candidate_revision"' in prompt
+    assert "If no valid Skill change is justified, return an empty skill_operations list" in prompt
 
 
 def test_atomic_commit_creates_revision_snapshot_and_consumes_delta(

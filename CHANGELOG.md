@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.1.0-alpha.1 - 2026-07-19
+
+首次公开的实验性快照。版本号不表示生产就绪；已知限制和未完成验收见 README、ROADMAP 与 `docs/development-status.md`。
+
+### Added
+
+- 添加 Tauri 2 Windows Shell、PyInstaller 6.16.0 `--onedir` FastAPI Sidecar 与 NSIS 当前用户安装包。
+- 添加动态本机空闲端口、Sidecar 健康门禁、三次启动重试、一次性本地关闭令牌与 8 秒优雅退出回收。
+- 添加 `%APPDATA%/SurvivalAgent/{data,logs,workspace,backups}` 用户目录、启动前 Alembic 自动迁移和启动错误日志。
+- 添加 Windows 凭据管理器 API Key 存储；密钥仅以子进程环境传递，不进入命令行、SQLite 或安装资源。
+- 添加真实 Sidecar E2E，覆盖空库迁移、未授权关闭拒绝、进程重启和 SQLite 数据保留。
+
+### Changed
+
+- 生产前端在启动时从 Tauri 获取动态 REST/WebSocket 地址，浏览器开发模式继续使用相对 `/api`。
+- 空库模型默认配置更新为 `https://api.a6api.com/v1` + `gpt-5.6-sol`，仅迁移原始内置默认值，不覆盖用户自定义配置。
+- 设置页在桌面模式显示系统凭据输入与真实 `%APPDATA%` Workspace；状态栏标识第 9 阶段。
+
+### Fixed
+
+- 明确认知整理中 Memory 与 Skill 操作的独立 JSON 字段契约，并提供 Skill 新增与候选版本示例，避免模型把 `category`、`tags`、`priority` 等记忆字段混入 Skill 后反复校验失败。
+
+### Security
+
+- Sidecar 使用 `CREATE_NO_WINDOW`、关闭端点要求随机令牌、CSP 只允许本地 loopback HTTP/WebSocket。
+- 安装器不含真实 API Key、代理地址或凭据；公开分发前仍需外部代码签名证书。
+
 ## 0.9.0 - 2026-07-19
 
 ### Added

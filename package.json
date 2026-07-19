@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/web"
+    "apps/web",
+    "apps/desktop"
   ],
   "scripts": {
     "dev:web": "npm --workspace @survival-agent/web run dev",
@@ -11,7 +12,10 @@
     "lint:web": "npm --workspace @survival-agent/web run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:web": "npm --workspace @survival-agent/web run test"
+    "test:web": "npm --workspace @survival-agent/web run test",
+    "build:sidecar": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-sidecar.ps1",
+    "desktop:dev": "npm run build:web && npm run build:sidecar && npm --workspace @survival-agent/desktop run dev",
+    "desktop:build": "npm run build:web && npm run build:sidecar && npm --workspace @survival-agent/desktop run build"
   },
   "devDependencies": {
     "prettier": "^3.6.2"

@@ -80,9 +80,10 @@ def test_log_formatter_never_writes_credentials() -> None:
     logger.handlers = [handler]
     logger.propagate = False
     logger.setLevel(logging.INFO)
-    logger.info("Authorization=Bearer sk-phase8logsecret123456")
+    fake_secret = "sk-" + "phase8-log-redaction-fixture"
+    logger.info("Authorization=Bearer %s", fake_secret)
     output = stream.getvalue()
-    assert "sk-phase8logsecret123456" not in output
+    assert fake_secret not in output
     assert REDACTED in output
     assert "conversation_id=-" in output
 
@@ -153,7 +154,7 @@ def test_committed_data_survives_engine_disposal(stability_sessions) -> None:
 
 
 def test_export_is_consistent_and_redacts_credentials(client) -> None:
-    exposed = "sk-phase8exportsecret123456"
+    exposed = "sk-" + "phase8-export-redaction-fixture"
     created = client.post("/api/conversations", json={"title": f"secret {exposed}"})
     assert created.status_code == 201
     response = client.get("/api/data/export")

@@ -2,9 +2,21 @@
 
 Survival Agent 是一个本地运行、图形优先、数据可恢复的 AI Agent。项目采用独立实现，不 Fork Hermes Agent；第一版按阶段交付，先确保基础架构稳定，再逐步加入对话、工具、Token 生存账本、记忆与 Skill 演化。
 
+> [!WARNING]
+> 本项目目前是 `0.1.0-alpha` 实验版本，接口、数据库结构和桌面打包方式仍可能变化。它尚未经过第三方安全审计，Windows 安装包也未进行代码签名，请勿用于生产环境、敏感数据或不可恢复的自动化任务。
+
+## 项目定位
+
+- 本地优先：业务数据默认保存在本机 SQLite 和受限 Workspace。
+- 可审计：消息、工具调用、Token 账本、记忆版本、Skill 版本与执行轨迹保留结构化关联。
+- 可恢复：后台整理失败不会覆盖旧记忆，数据库迁移和桌面数据目录相互独立。
+- Provider 可替换：支持 OpenAI 兼容接口；请自行评估所选服务商的隐私、计费和可用性。
+
+这不是官方 OpenAI 产品，也不隶属于 Hermes Agent 或任何模型服务商。
+
 ## 当前状态
 
-第 0—8 阶段已完成。前端使用正式 REST/WebSocket API，会话、回合、消息、工具执行、Token 交易、反馈、实时/正式记忆、认知 Job、Skill Registry 与执行轨迹保存在 SQLite。OpenAI 兼容 Provider 支持 SSE 流式输出与结构化工具调用；每轮真实 Usage 使用 Token Units 精确扣款，满意只返还一次 108%，不满意只进入质量反馈通道。每 20 个完整回合的 Cognitive Worker 只能提出严格操作；记忆和 Skill 都由确定性代码校验后原子提交。第 8 阶段补齐并发领取、乐观冲突、启动恢复、重试、数据导出、日志脱敏与独立进程 E2E。
+第 0—8 阶段已完成；第 9 阶段的 Tauri/Sidecar/NSIS 本地链路已实现，最终真实模型桌面复验仍待完成。React 前端现可作为 Tauri Windows 桌面应用运行，自动启动隐藏的 PyInstaller `--onedir` FastAPI Sidecar、选择本地空闲端口、等待健康检查并在关闭时优雅回收。会话、回合、消息、工具执行、Token 交易、反馈、实时/正式记忆、认知 Job、Skill Registry 与执行轨迹保存在真实 SQLite。准确进度和验收边界见 [`docs/development-status.md`](docs/development-status.md)。
 
 已实现页面：
 
@@ -12,13 +24,15 @@ Survival Agent 是一个本地运行、图形优先、数据可恢复的 AI Agen
 - `/memory`：正式 18,000 字符与实时 2,000 字符双层记忆，搜索、锁定、归档、恢复、版本历史、回滚及 consumed 来源链路。
 - `/skills`：真实 Skill Registry、搜索、创建/编辑、锁定、归档、稳定/候选统计、版本差异控制与回滚。
 - `/activity`：真实认知 Job 与“发现问题→候选→评估→晋升/拒绝/回滚”的 Skill 审计链。
-- `/settings`：持久化 OpenAI 兼容 Base URL、模型、超时和输出上限，显示 Workspace/工具，并从同一 WAL 读快照下载脱敏 JSON；API Key 仅从环境变量读取。
+- `/settings`：持久化 OpenAI 兼容 Base URL、模型、超时和输出上限，显示 Workspace/工具，并从同一 WAL 读快照下载脱敏 JSON；桌面 API Key 存入 Windows 凭据管理器，开发模式仍只读取环境变量。
 
 ## 目录
 
 ```text
 apps/web/             React 图形前端
+apps/desktop/         Tauri Windows Shell 与安装器配置
 services/api/         FastAPI 服务
+services/desktop_sidecar.py  桌面 Sidecar 启动、迁移与优雅退出
 migrations/           Alembic 数据库迁移
 packages/contracts/   跨端结构化契约（后续阶段扩展）
 tests/backend/        后端测试
@@ -48,6 +62,8 @@ npm run dev:web
 
 模型 Base URL 应填 OpenAI 兼容 API 根路径，例如 `https://api.example.com/v1`；Provider 会在后面追加 `/chat/completions`。
 
+不要把 API Key 写进 `.env.example`、SQLite、命令参数、Issue 或提交记录。开发模式仅从当前进程环境变量读取；桌面模式使用 Windows 凭据管理器。
+
 工具只能访问 `SURVIVAL_AGENT_WORKSPACE_PATH` 配置的 Workspace（默认 `./workspace`）。路径必须为相对路径；写入已有文件必须由模型显式传入 `overwrite=true`。Workspace 内容是本地用户数据，不提交 Git。
 
 Token 生存账本内部使用整数 Units（100 Units = 1 Token）：读取与输出初始余额分别为 1,000,000,000 和 100,000,000 Token。系统不会因余额不足自动拒绝任务，也不会把缓存或推理明细重复计入 Provider 的总 Usage。
@@ -66,6 +82,25 @@ npm run test:web
 npm run build:web
 uv run ruff check .
 uv run pytest
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+npm run build:sidecar
+uv run python tests/e2e/phase9_sidecar_flow.py
 ```
 
-真实密钥只允许保存在本地环境变量或未来桌面端的系统 Keychain 中，不进入数据库或 Git。
+完整 Windows 安装包使用 `npm run desktop:build` 生成到 `apps/desktop/src-tauri/target/release/bundle/nsis/`。构建脚本固定 PyInstaller 6.16.0；如本机配置了代理，包管理器会沿用当前进程的 `HTTP_PROXY/HTTPS_PROXY`，代理凭据不得写入仓库。桌面数据位于 `%APPDATA%/SurvivalAgent/{data,logs,workspace,backups}`，卸载不会把业务数据当作安装资源删除。更多说明见 `docs/desktop-packaging.md`。
+
+真实密钥只允许保存在开发进程环境变量或桌面端 Windows 凭据管理器中，不进入 SQLite、日志、Sidecar 参数、导出、安装包或 Git。
+
+## 已知限制
+
+- 仅对 Windows 11 桌面链路进行了本地验收，macOS 与 Linux 尚未支持。
+- Windows 安装包未签名，SmartScreen 可能显示未知发布者。
+- OpenAI 兼容 Provider 的流式 Usage 和错误格式并不完全统一，部分服务商可能需要适配。
+- Cognitive Worker 依赖模型严格输出 JSON；无效结果会被拒绝并保留旧记忆，等待重试。
+- 当前没有稳定发布渠道、自动更新、遥测、远程同步或多用户权限系统。
+
+后续计划见 [`ROADMAP.md`](ROADMAP.md)，安全报告方式见 [`SECURITY.md`](SECURITY.md)。
+
+## 参与项目
+
+提交 Issue 或 Pull Request 前请阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md)。公开仓库不代表已经授予开源许可；当前版权与使用边界见 [`LICENSE`](LICENSE)。

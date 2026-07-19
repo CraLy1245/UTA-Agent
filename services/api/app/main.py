@@ -68,6 +68,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 app.include_router(health_router, prefix="/api")
 app.include_router(memory_router, prefix="/api")

@@ -8,3 +8,7 @@
 - 关闭并重新打开应用 lifespan 后，会话、记忆和后台任务仍然存在。
 - 图形前端使用 Playwright CLI 对真实后端进行桌面与移动浏览器验收；命令和结果记录在
   `docs/development-status.md`。
+
+第 9 阶段在执行 `npm run build:sidecar` 后运行
+`uv run python tests/e2e/phase9_sidecar_flow.py`。该脚本启动真实 PyInstaller `--onedir`
+进程，验证空库迁移、四个用户目录、未授权关闭拒绝、优雅退出和重启后的 SQLite 数据保留。

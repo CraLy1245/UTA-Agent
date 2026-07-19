@@ -88,9 +88,18 @@ Cognitive Worker ─ strict JSON proposal ─ deterministic commit validator
 - 数据导出在一个只读事务中读取全部白名单表，形成同一 WAL 快照。导出与日志共享递归脱敏器，且模型配置导出不包含密钥环境变量字段。
 - 四类轮转日志只记录 UTC 时间、级别、conversation/turn/job ID、模块和脱敏消息；API 对数据库 busy 返回可重试 503，不向前端暴露 SQL 或连接细节。
 
+## 第 9 阶段桌面运行边界
+
+- Tauri 是生命周期所有者，不承载业务真相。启动时选择 `127.0.0.1` 空闲端口，以隐藏子进程启动 PyInstaller `--onedir` Sidecar，最多重试三次，并在 `/api/health` 成功前不完成 Shell 初始化。
+- 前端通过受限 Tauri command 读取动态 REST/WebSocket 地址；浏览器开发环境仍保持 `/api` 代理。CSP 只额外允许 loopback HTTP/WS，不开放任意远程 origin。
+- Sidecar 在导入 FastAPI/SQLAlchemy 前设置 `%APPDATA%/SurvivalAgent` 数据、日志和 Workspace 路径，并执行正式 Alembic upgrade；运行时仍禁止 `create_all()`。
+- Tauri 关闭时使用随机、仅进程内保存的令牌请求 Sidecar 停机，等待 Worker、数据库引擎与 Uvicorn 完成清理；8 秒后才执行兜底 kill。令牌和 API Key 均不出现在 Sidecar 参数。
+- 桌面密钥由 Tauri 写入 Windows 凭据管理器。每次启动只将读取到的密钥放入 Sidecar 子进程环境；Rust 状态、前端、SQLite、日志和安装资源都不保存明文。
+- PyInstaller 与 Tauri/NSIS 是可替换的交付层；业务 API、Migration、SQLite 和 React 路由与 Web 开发模式保持同一套实现。
+
 ## 长期可替换性
 
 - Provider 通过 `ProviderConfig` 和流式事件接口接入，避免绑定单一模型供应商。
 - 数据库变更全部通过 Alembic，禁止运行时 `create_all()`。
 - 前后端通过结构化契约通信，不解析自然语言推断运行状态。
-- Tauri 与 Python sidecar 延后到第 9 阶段，避免打包约束污染核心模块。
+- Tauri 与 Python Sidecar 仅位于桌面交付层，核心 Provider、账本、记忆、Skill 与 Worker 仍可独立运行和测试。

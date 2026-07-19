@@ -78,7 +78,7 @@
 
 ## 第 8 阶段一致性与恢复
 
-第 8 阶段不新增业务表或运行时 `create_all()`；现有 `20260718_0007` 仍为 Alembic head。稳定性规则落在事务、状态机和测试边界：
+第 8 阶段不新增业务表或运行时 `create_all()`；当时的 Alembic head 为 `20260718_0007`。稳定性规则落在事务、状态机和测试边界：
 
 - Worker `BEGIN IMMEDIATE` 领取后立即提交领取状态；同一 Job 不会被两个 Session 同时领取。
 - `pending/conflict + next_attempt_at` 是可恢复的 Durable Queue。未来重试不会阻塞后续 ready Job。
@@ -89,3 +89,14 @@
 ## 数据路径
 
 开发默认数据库：`data/survival_agent.db`。路径可通过 `SURVIVAL_AGENT_DATABASE_URL` 覆盖。数据库文件、WAL 和共享内存文件均不提交 Git。
+
+## 第 9 阶段桌面数据与迁移
+
+桌面 Sidecar 在导入数据库模块前固定以下用户路径：
+
+- `%APPDATA%/SurvivalAgent/data/survival_agent.db`
+- `%APPDATA%/SurvivalAgent/logs/`
+- `%APPDATA%/SurvivalAgent/workspace/`
+- `%APPDATA%/SurvivalAgent/backups/`
+
+`20260719_0008` 是当前 head。它只把仍等于原始内置值的模型配置改为 `https://api.a6api.com/v1` + `gpt-5.6-sol`，不会覆盖已经自定义的 Base URL 或模型。Sidecar 每次启动执行幂等 `alembic upgrade head`；数据目录不打入安装资源，重装和升级不会替换用户数据库。

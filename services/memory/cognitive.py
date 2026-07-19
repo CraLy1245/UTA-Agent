@@ -396,6 +396,61 @@ def build_job_payload(db: Session, job: CognitiveJob) -> dict[str, object]:
     }
 
 
+def cognitive_system_prompt() -> str:
+    return (
+        "You consolidate agent memory. Return ONE strict JSON object only. Never emit markdown. "
+        "Use only add/update/merge/archive/noop. Never modify locked memory. Every new fact needs "
+        "source_turn_ids from the supplied exact 20 turns. Keep active formal memory <=18000 "
+        "characters. Consume only supplied delta ids. Skill changes must use skill_operations. "
+        "Prefer updating or merging an existing general Skill. Add a new Skill only after three "
+        "traceable similar turns or an explicit request to save a Skill. "
+        "Never modify locked Skills. "
+        "Never replace a stable Skill directly because of negative feedback: use "
+        "create_candidate_revision with its current stable_revision_id, traceable negative source "
+        "turns, reason, and expected_improvement. Candidate content must retain "
+        "success_criteria and safety constraints. "
+        "The exact required top-level keys are summary, memory_operations, skill_operations, "
+        "consumed_delta_ids, warnings. summary is always required. consumed_delta_ids belongs only "
+        "at the top level; never put delta_ids inside a memory operation. "
+        "A memory operation may contain ONLY operation, memory_ids, title, content, category, "
+        "tags, priority, source_turn_ids, expected_revision_ids, reason. For add, title, content, "
+        "category "
+        "and source_turn_ids are required. For update/merge/archive include memory_ids and "
+        "expected_revision_ids copied exactly from formal_memory. "
+        "A Skill operation may contain ONLY operation, skill_ids, name, description, content, "
+        "base_revision_id, expected_revision_ids, source_turn_ids, reason, expected_improvement. "
+        "Never put category, tags, priority, success, success_name, feedback, or "
+        "feedback_adaptation in a Skill operation. Do not invent any field. Skill operation must "
+        "be "
+        "exactly one of add, update, merge, archive, create_candidate_revision, noop. "
+        "Skill add requires name, description, content, and source_turn_ids. Skill update requires "
+        "one skill_id and content. Skill merge requires at least two skill_ids and content. Skill "
+        "archive requires one skill_id. create_candidate_revision requires one skill_id, "
+        "base_revision_id, content, reason, expected_improvement, and source_turn_ids. If no valid "
+        "Skill change is justified, return an empty skill_operations list. "
+        "Valid memory example: "
+        '{"summary":"Consolidated preferences","memory_operations":[{"operation":"add",'
+        '"memory_ids":[],"title":"Interaction preference","content":"Use the GUI",'
+        '"category":"preference","tags":["interaction"],"priority":90,'
+        '"source_turn_ids":["an-exact-supplied-turn-id"],"expected_revision_ids":{},'
+        '"reason":"Repeated explicit instruction"}],"skill_operations":[],'
+        '"consumed_delta_ids":["an-exact-supplied-delta-id"],"warnings":[]}. '
+        "Valid Skill add example: "
+        '{"operation":"add","skill_ids":[],"name":"Evidence check",'
+        '"description":"Verify claims before answering","content":"steps:\\n- verify sources\\n'
+        'success_criteria:\\n- claims are traceable","base_revision_id":null,'
+        '"expected_revision_ids":{},"source_turn_ids":["an-exact-supplied-turn-id"],'
+        '"reason":"Repeated successful workflow","expected_improvement":null}. '
+        "Valid candidate example: "
+        '{"operation":"create_candidate_revision","skill_ids":["an-existing-skill-id"],'
+        '"name":null,"description":null,"content":"steps:\\n- revised step\\n'
+        'success_criteria:\\n- issue is resolved","base_revision_id":"the-stable-revision-id",'
+        '"expected_revision_ids":{"an-existing-skill-id":"the-current-revision-id"},'
+        '"source_turn_ids":["an-exact-negative-feedback-turn-id"],'
+        '"reason":"Traceable negative feedback","expected_improvement":"Avoid the failure"}.'
+    )
+
+
 async def request_cognitive_result(payload: dict[str, object]) -> CognitiveResult:
     with SessionLocal() as db:
         setting = db.get(ModelSetting, "memory") or db.get(ModelSetting, "main")
@@ -414,31 +469,7 @@ async def request_cognitive_result(payload: dict[str, object]) -> CognitiveResul
                 temperature=setting.temperature,
             )
         )
-    system = (
-        "You consolidate agent memory. Return ONE strict JSON object only. Never emit markdown. "
-        "Use only add/update/merge/archive/noop. Never modify locked memory. Every new fact needs "
-        "source_turn_ids from the supplied exact 20 turns. Keep active formal memory <=18000 "
-        "characters. Consume only supplied delta ids. Skill changes must use skill_operations. "
-        "Prefer updating or merging an existing general Skill. Add a new Skill only after three "
-        "traceable similar turns or an explicit request to save a Skill. "
-        "Never modify locked Skills. "
-        "Never replace a stable Skill directly because of negative feedback: use "
-        "create_candidate_revision with its current stable_revision_id, traceable negative source "
-        "turns, reason, and expected_improvement. Candidate content must retain "
-        "success_criteria and "
-        "safety constraints. Use only add/update/merge/archive/create_candidate_revision/noop. "
-        "The exact required top-level keys are summary, memory_operations, skill_operations, "
-        "consumed_delta_ids, warnings. summary is always required. consumed_delta_ids belongs only "
-        "at the top level; never put delta_ids inside a memory operation. For add, title, content, "
-        "category and source_turn_ids are required. For update/merge/archive include memory_ids "
-        "and expected_revision_ids copied exactly from formal_memory. Example shape: "
-        '{"summary":"Consolidated preferences","memory_operations":[{"operation":"add",'
-        '"memory_ids":[],"title":"Interaction preference","content":"Use the GUI",'
-        '"category":"preference","tags":["interaction"],"priority":90,'
-        '"source_turn_ids":["an-exact-supplied-turn-id"],"expected_revision_ids":{},'
-        '"reason":"Repeated explicit instruction"}],"skill_operations":[],'
-        '"consumed_delta_ids":["an-exact-supplied-delta-id"],"warnings":[]}.'
-    )
+    system = cognitive_system_prompt()
     chunks: list[str] = []
     async for event in provider.stream(
         [

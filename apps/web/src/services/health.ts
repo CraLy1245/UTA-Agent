@@ -1,11 +1,10 @@
 import type { HealthResponse } from "../types/health";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
+import { apiBaseUrl } from "./desktop";
 
 export async function fetchHealth(
   signal?: AbortSignal,
 ): Promise<HealthResponse> {
-  const response = await fetch(`${API_BASE_URL}/health`, {
+  const response = await fetch(`${apiBaseUrl()}/health`, {
     headers: { Accept: "application/json" },
     signal,
   });

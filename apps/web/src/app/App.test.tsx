@@ -243,7 +243,7 @@ describe("phase 6 application", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("已持久化的回答")).toBeInTheDocument();
     expect(screen.getByText("Agent 状态")).toBeInTheDocument();
-    expect(screen.getByText("第 8 阶段 稳定性验证")).toBeInTheDocument();
+    expect(screen.getByText("第 9 阶段 桌面版就绪")).toBeInTheDocument();
     expect(await screen.findByText("1,000,000,000.00")).toBeInTheDocument();
     expect(screen.getByText("100,000,000.00")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "折叠会话栏" }));
